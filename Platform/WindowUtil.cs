@@ -9,17 +9,21 @@ namespace Translator.Platform;
 internal static class WindowUtil
 {
     /// <summary>
-    /// Colors the native title bar (Windows 11) so it blends with the window content,
-    /// optionally hiding the caption text and icon.
+    /// Colors the native title bar (Windows 11) so it blends with the window content, optionally hiding the
+    /// caption text and icon. <paramref name="dark"/> also switches the caption buttons to their dark look (Windows 10 too).
     /// </summary>
-    public static void StyleCaption(Window window, Color caption, bool hideTitle)
+    public static void StyleCaption(Window window, Color caption, Color text, bool dark, bool hideTitle)
     {
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
         if (hwnd == IntPtr.Zero)
             return;
 
-        int colorRef = caption.R | (caption.G << 8) | (caption.B << 16);
-        Native.DwmSetWindowAttribute(hwnd, Native.DWMWA_CAPTION_COLOR, ref colorRef, sizeof(int));
+        int useDark = dark ? 1 : 0;
+        Native.DwmSetWindowAttribute(hwnd, Native.DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+        int captionRef = ToColorRef(caption);
+        Native.DwmSetWindowAttribute(hwnd, Native.DWMWA_CAPTION_COLOR, ref captionRef, sizeof(int));
+        int textRef = ToColorRef(text);
+        Native.DwmSetWindowAttribute(hwnd, Native.DWMWA_TEXT_COLOR, ref textRef, sizeof(int));
 
         if (hideTitle)
         {
@@ -31,6 +35,8 @@ internal static class WindowUtil
             Native.SetWindowThemeAttribute(hwnd, Native.WTA_NONCLIENT, ref options, (uint)Marshal.SizeOf<Native.WTA_OPTIONS>());
         }
     }
+
+    private static int ToColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 
     /// <summary>Shows, restores and activates a window even when another program is in the foreground.</summary>
     public static void ForceForeground(Window window)

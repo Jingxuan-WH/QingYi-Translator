@@ -35,7 +35,9 @@ internal static class Native
     public const int WPF_RESTORETOMAXIMIZED = 0x2;
     public const uint MONITOR_DEFAULTTONULL = 0;
 
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_CAPTION_COLOR = 35;
+    public const int DWMWA_TEXT_COLOR = 36;
     public const int WTA_NONCLIENT = 1;
     public const uint WTNCA_NODRAWCAPTION = 0x1;
     public const uint WTNCA_NODRAWICON = 0x2;

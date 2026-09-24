@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 
 namespace Translator.Core;
 
+/// <summary>What the user configured for one provider. Request details (temperature, thinking switches) come from its <see cref="ProviderPreset"/>.</summary>
 public sealed class ProviderConfig
 {
     public string BaseUrl { get; set; } = "";
@@ -16,11 +17,6 @@ public sealed class ProviderConfig
     /// <summary>API key encrypted with Windows DPAPI (current user), base64.</summary>
     public string? ApiKeyProtected { get; set; }
 
-    public double Temperature { get; set; } = 0.3;
-
-    /// <summary>Sends <c>"thinking": {"type": "disabled"}</c>; DeepSeek enables thinking by default, which only slows translation down.</summary>
-    public bool DisableThinking { get; set; }
-
     [JsonIgnore]
     public string ApiKey
     {
@@ -28,27 +24,9 @@ public sealed class ProviderConfig
         set => ApiKeyProtected = string.IsNullOrWhiteSpace(value) ? null : Dpapi.Protect(value.Trim());
     }
 
+    public static ProviderConfig FromPreset(ProviderPreset preset) => new() { BaseUrl = preset.BaseUrl, Model = preset.DefaultModel };
+
     public ProviderConfig Clone() => (ProviderConfig)MemberwiseClone();
-}
-
-public static class Providers
-{
-    public const string DeepSeek = "DeepSeek";
-    public const string Custom = "Custom";
-
-    public static IReadOnlyList<string> All { get; } = [DeepSeek, Custom];
-
-    public static string DisplayName(string id) => id == DeepSeek ? "DeepSeek" : "自定义接口";
-
-    public static IReadOnlyList<string> SuggestedModels(string id) =>
-        id == DeepSeek ? ["deepseek-flash", "deepseek-v4-pro"] : [];
-
-    public static ProviderConfig CreateDefault(string id) => id switch
-    {
-        // DeepSeek's docs recommend temperature 1.3 for translation (their API rescales the value).
-        DeepSeek => new ProviderConfig { BaseUrl = "https://api.deepseek.com", Model = "deepseek-flash", Temperature = 1.3, DisableThinking = true },
-        _ => new ProviderConfig { Temperature = 0.3 },
-    };
 }
 
 /// <summary>Restored-state window bounds in physical pixels, as reported by GetWindowPlacement.</summary>
@@ -69,9 +47,25 @@ public sealed class AppSettings
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public string ActiveProvider { get; set; } = Providers.DeepSeek;
+    public string ActiveProvider { get; set; } = ProviderCatalog.DeepSeekId;
     public Dictionary<string, ProviderConfig> ProviderConfigs { get; set; } = new();
     public string ExtraInstructions { get; set; } = "";
+
+    /// <summary>"auto" or a language code.</summary>
+    public string SourceLanguage { get; set; } = Languages.AutoCode;
+
+    /// <summary>The language the user wants translations in; text already in it goes to <see cref="Languages.FallbackFor"/>.</summary>
+    public string TargetLanguage { get; set; } = Languages.SimplifiedChinese.Code;
+
+    public bool IncrementalTranslation { get; set; } = true;
+    public bool SaveHistory { get; set; } = true;
+    public bool GlossaryEnabled { get; set; } = true;
+
+    /// <summary>Interface language: "system", "zh" or "en".</summary>
+    public string UiLanguage { get; set; } = Loc.SystemCode;
+
+    /// <summary>"system", "light" or "dark".</summary>
+    public string Theme { get; set; } = ThemeSystem;
 
     public bool DoubleCopyEnabled { get; set; } = true;
     public bool HotkeyEnabled { get; set; } = true;
@@ -85,6 +79,22 @@ public sealed class AppSettings
     public bool TrayTipShown { get; set; }
     public WindowBounds? MainWindowBounds { get; set; }
 
+    public bool AutoCheckUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheck { get; set; }
+
+    /// <summary>Tag of a release the user chose to skip; it is no longer announced.</summary>
+    public string? SkippedUpdateVersion { get; set; }
+
+    /// <summary>Tag of the last release announced with a tray notification, so each one is announced only once.</summary>
+    public string? NotifiedUpdateVersion { get; set; }
+
+    public const string ThemeSystem = "system";
+    public const string ThemeLight = "light";
+    public const string ThemeDark = "dark";
+
+    [JsonIgnore]
+    public ProviderPreset ActivePreset => ProviderCatalog.Get(ActiveProvider);
+
     [JsonIgnore]
     public ProviderConfig Active => GetProvider(ActiveProvider);
 
@@ -92,7 +102,7 @@ public sealed class AppSettings
     {
         if (!ProviderConfigs.TryGetValue(id, out var config))
         {
-            config = Providers.CreateDefault(id);
+            config = ProviderConfig.FromPreset(ProviderCatalog.Get(id));
             ProviderConfigs[id] = config;
         }
         return config;
@@ -105,6 +115,9 @@ public sealed class AppSettings
         Environment.GetEnvironmentVariable("TRANSLATOR_DATA_DIR") is { Length: > 0 } custom
             ? custom
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QingYiTranslator");
+
+    /// <summary>True when TRANSLATOR_DATA_DIR points somewhere else, e.g. for a test copy running next to the real one.</summary>
+    public static bool UsesCustomDataDirectory => Environment.GetEnvironmentVariable("TRANSLATOR_DATA_DIR") is { Length: > 0 };
 
     private static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
 
@@ -154,10 +167,18 @@ public sealed class AppSettings
         ProviderConfigs ??= new();
         ExtraInstructions ??= "";
         Hotkey ??= "";
-        if (!Providers.All.Contains(ActiveProvider))
-            ActiveProvider = Providers.DeepSeek;
-        foreach (string id in Providers.All)
-            GetProvider(id);
+        if (ProviderCatalog.All.All(preset => preset.Id != ActiveProvider))
+            ActiveProvider = ProviderCatalog.DeepSeekId;
+        foreach (var preset in ProviderCatalog.All)
+            GetProvider(preset.Id);
+        if (SourceLanguage != Languages.AutoCode && Languages.Find(SourceLanguage) is null)
+            SourceLanguage = Languages.AutoCode;
+        if (Languages.Find(TargetLanguage) is null)
+            TargetLanguage = Languages.SimplifiedChinese.Code;
+        if (UiLanguage is not (Loc.ChineseCode or Loc.EnglishCode))
+            UiLanguage = Loc.SystemCode;
+        if (Theme is not (ThemeLight or ThemeDark))
+            Theme = ThemeSystem;
     }
 }
 

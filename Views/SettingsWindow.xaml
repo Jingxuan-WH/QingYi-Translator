@@ -1,11 +1,13 @@
 <Window x:Class="Translator.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="设置"
-        Width="560" Height="660" MinWidth="480" MinHeight="420"
+        xmlns:v="clr-namespace:Translator.Views"
+        Title="{v:T 设置, En=Settings}"
+        Width="560" Height="680" MinWidth="480" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource WindowBrush}"
+        Background="{DynamicResource WindowBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
         Icon="/Assets/app.ico">
@@ -15,37 +17,65 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" FocusVisualStyle="{x:Null}">
             <StackPanel Margin="24,2,24,20">
 
+                <!-- Appearance -->
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 外观, En=Appearance}"/>
+                <Border Style="{StaticResource Card}" Padding="18,12,18,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="200"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="{v:T '界面语言 / Language', En=Language}" FontSize="13" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="UiLanguageBox" Grid.Column="1" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                                  AutomationProperties.AutomationId="UiLanguageBox" AutomationProperties.Name="{v:T 界面语言, En=Language}"
+                                  SelectionChanged="UiLanguageBox_SelectionChanged"/>
+                        <TextBlock Grid.Row="1" Text="{v:T 主题, En=Theme}" FontSize="13" VerticalAlignment="Center" Margin="0,10,0,0"/>
+                        <ComboBox x:Name="ThemeBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                                  Margin="0,10,0,0"
+                                  AutomationProperties.AutomationId="ThemeBox" AutomationProperties.Name="{v:T 主题, En=Theme}"
+                                  SelectionChanged="ThemeBox_SelectionChanged"/>
+                    </Grid>
+                </Border>
+
                 <!-- Translation service -->
-                <TextBlock Style="{StaticResource SectionTitle}" Text="翻译服务"/>
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 翻译服务, En='Translation service'}"/>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="服务商"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{v:T 服务商, En=Provider}"/>
                         <ComboBox x:Name="ProviderBox" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                                  MaxDropDownHeight="440" AutomationProperties.AutomationId="ProviderBox"
+                                  AutomationProperties.Name="{v:T 服务商, En=Provider}"
                                   SelectionChanged="ProviderBox_SelectionChanged"/>
+                        <TextBlock x:Name="ProviderHint" Style="{StaticResource HintText}"/>
 
                         <DockPanel Margin="0,12,0,6">
                             <Button x:Name="KeyLinkButton" DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
-                                    Content="获取 DeepSeek API Key" Click="KeyLinkButton_Click"/>
-                            <TextBlock Text="API Key" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    Content="{v:T '获取 API Key', En='Get an API key'}" Click="KeyLinkButton_Click"/>
+                            <TextBlock Text="API Key" FontSize="13"/>
                         </DockPanel>
                         <Grid>
-                            <PasswordBox x:Name="KeyBox" Style="{StaticResource FormPasswordBox}" Padding="8,0,40,0"/>
+                            <PasswordBox x:Name="KeyBox" Style="{StaticResource FormPasswordBox}" Padding="8,0,40,0"
+                                         AutomationProperties.AutomationId="KeyBox" AutomationProperties.Name="API Key"/>
                             <TextBox x:Name="KeyPlainBox" Style="{StaticResource FormTextBox}" Padding="8,0,40,0" Visibility="Collapsed"/>
                             <ToggleButton x:Name="RevealKeyButton" Style="{StaticResource IconToggleButton}" Width="30" Height="28"
-                                          FontSize="13" Content="&#xE890;" ToolTip="显示 / 隐藏"
+                                          FontSize="13" Content="&#xE890;" ToolTip="{v:T '显示 / 隐藏', En='Show / hide'}"
                                           HorizontalAlignment="Right" Margin="0,0,3,0" Click="RevealKeyButton_Click"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource HintText}" Text="API Key 使用 Windows 账户加密后保存在本机，不会上传到其他地方。"/>
+                        <TextBlock x:Name="KeyHint" Style="{StaticResource HintText}"/>
 
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="接口地址"/>
-                        <TextBox x:Name="BaseUrlBox" Style="{StaticResource FormTextBox}"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{v:T 接口地址, En='Base URL'}"/>
+                        <TextBox x:Name="BaseUrlBox" Style="{StaticResource FormTextBox}" AutomationProperties.AutomationId="BaseUrlBox"/>
                         <TextBlock x:Name="BaseUrlHint" Style="{StaticResource HintText}"/>
 
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="模型"/>
-                        <TextBox x:Name="ModelBox" Style="{StaticResource FormTextBox}"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{v:T 模型, En=Model}"/>
+                        <TextBox x:Name="ModelBox" Style="{StaticResource FormTextBox}" AutomationProperties.AutomationId="ModelBox"/>
                         <ItemsControl x:Name="ModelChips" Margin="0,8,0,0">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -61,35 +91,36 @@
                         <TextBlock x:Name="ModelHint" Style="{StaticResource HintText}"/>
 
                         <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                            <Button x:Name="TestButton" Style="{StaticResource SecondaryButton}" Content="测试连接" Click="TestButton_Click"/>
+                            <Button x:Name="TestButton" Style="{StaticResource SecondaryButton}" Content="{v:T 测试连接, En='Test connection'}"
+                                    AutomationProperties.AutomationId="TestButton" Click="TestButton_Click"/>
                             <TextBlock x:Name="TestResult" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12"
-                                       TextWrapping="Wrap" MaxWidth="360"/>
+                                       TextWrapping="Wrap" MaxWidth="340" AutomationProperties.AutomationId="TestResult"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <!-- Shortcuts -->
-                <TextBlock Style="{StaticResource SectionTitle}" Text="快捷键"/>
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 快捷键, En=Shortcuts}"/>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <CheckBox x:Name="DoubleCopyToggle" Style="{StaticResource ToggleSwitch}" Margin="0,12,0,0"
-                                  Content="按两次 Ctrl+C 翻译选中的文字"/>
-                        <TextBlock Style="{StaticResource HintText}" Text="与 DeepL 相同：选中文字后按住 Ctrl，快速按两下 C。"/>
+                                  Content="{v:T '按两次 Ctrl+C 翻译选中的文字', En='Press Ctrl+C twice to translate the selection'}"/>
+                        <TextBlock Style="{StaticResource HintText}"
+                                   Text="{v:T '与 DeepL 相同：选中文字后按住 Ctrl，快速按两下 C。', En='Like DeepL: select text, hold Ctrl and quickly press C twice.'}"/>
 
                         <CheckBox x:Name="HotkeyToggle" Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0"
-                                  Content="使用快捷键翻译选中的文字" Click="HotkeyToggle_Click"/>
+                                  Content="{v:T 使用快捷键翻译选中的文字, En='Use a hotkey to translate the selection'}" Click="HotkeyToggle_Click"/>
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="200"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="快捷键" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"
-                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="{v:T 快捷键, En=Hotkey}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
                             <TextBox x:Name="HotkeyBox" Grid.Column="1" Style="{StaticResource FormTextBox}"
                                      IsReadOnly="True" IsReadOnlyCaretVisible="False" Cursor="Hand"
-                                     InputMethod.IsInputMethodEnabled="False"
-                                     ToolTip="点击后按下新的组合键"
+                                     InputMethod.IsInputMethodEnabled="False" ContextMenu="{x:Null}"
+                                     ToolTip="{v:T 点击后按下新的组合键, En='Click, then press the new key combination'}"
                                      PreviewKeyDown="HotkeyBox_PreviewKeyDown"
                                      GotKeyboardFocus="HotkeyBox_GotKeyboardFocus"
                                      LostKeyboardFocus="HotkeyBox_LostKeyboardFocus"/>
@@ -99,46 +130,88 @@
                 </Border>
 
                 <!-- Preferences -->
-                <TextBlock Style="{StaticResource SectionTitle}" Text="翻译偏好"/>
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 翻译偏好, En='Translation preferences'}"/>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="附加要求（可选）"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{v:T 附加要求（可选）, En='Extra instructions (optional)'}"/>
                         <Grid>
                             <TextBox x:Name="ExtraBox" Style="{StaticResource FormTextBox}" Height="76" Padding="8,6"
                                      VerticalContentAlignment="Top" AcceptsReturn="True" TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto" TextChanged="ExtraBox_TextChanged"/>
                             <TextBlock x:Name="ExtraPlaceholder" Margin="11,7,10,0" FontSize="13" TextWrapping="Wrap"
-                                       IsHitTestVisible="False" Foreground="{StaticResource TextTertiaryBrush}"
-                                       Text="例如：使用学术论文的正式文风；专业术语保留英文原文。"/>
+                                       IsHitTestVisible="False" Foreground="{DynamicResource TextTertiaryBrush}"
+                                       Text="{v:T '例如：使用学术论文的正式文风；专业术语保留英文原文。', En='For example: use the formal style of academic papers; keep technical terms in English.'}"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource HintText}" Text="会附加在给模型的翻译指令后面。"/>
+                        <TextBlock Style="{StaticResource HintText}"
+                                   Text="{v:T 会附加在给模型的翻译指令后面。, En='Appended to the translation instructions sent to the model.'}"/>
+
+                        <CheckBox x:Name="IncrementalToggle" Style="{StaticResource ToggleSwitch}" Margin="0,18,0,0"
+                                  Content="{v:T 增量翻译：追加内容时只翻译新增部分, En='Incremental translation: only translate what you add'}"/>
+                        <TextBlock Style="{StaticResource HintText}"
+                                   Text="{v:T '已经译好的完整段落直接复用，并作为上下文发给模型，保持前后术语一致；更快也更省钱。关闭后每次修改都整体重新翻译。', En='Finished paragraphs are reused and sent to the model as context, keeping terms consistent. Faster and cheaper. When off, every edit retranslates everything.'}"/>
+
+                        <DockPanel Margin="0,18,0,0">
+                            <Button x:Name="GlossaryButton" DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}"
+                                    Padding="14,6" MinWidth="0" VerticalAlignment="Center"
+                                    Content="{v:T 编辑术语表…, En='Edit glossary…'}"
+                                    AutomationProperties.AutomationId="EditGlossaryButton" Click="GlossaryButton_Click"/>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="{v:T 术语表, En=Glossary}" FontSize="13"/>
+                                <TextBlock x:Name="GlossaryStatus" Style="{StaticResource HintText}"/>
+                            </StackPanel>
+                        </DockPanel>
                     </StackPanel>
                 </Border>
 
                 <!-- General -->
-                <TextBlock Style="{StaticResource SectionTitle}" Text="常规"/>
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 常规, En=General}"/>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <CheckBox x:Name="AutoTranslateToggle" Style="{StaticResource ToggleSwitch}" Margin="0,12,0,0"
-                                  Content="输入时自动翻译"/>
+                                  Content="{v:T 输入时自动翻译, En='Translate as you type'}"/>
+                        <CheckBox x:Name="HistoryToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0"
+                                  Content="{v:T '保存翻译历史（最近 100 条，只存在本机）', En='Keep history (last 100, stored only on this PC)'}"/>
                         <CheckBox x:Name="RestoreClipboardToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0"
-                                  Content="快捷键取词后恢复剪贴板原来的内容"/>
+                                  Content="{v:T 快捷键取词后恢复剪贴板原来的内容, En='Restore the clipboard after the hotkey copies a selection'}"/>
                         <CheckBox x:Name="CloseToTrayToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0"
-                                  Content="关闭主窗口时最小化到系统托盘"/>
+                                  Content="{v:T 关闭主窗口时最小化到系统托盘, En='Minimize to the system tray when closed'}"/>
                         <CheckBox x:Name="StartupToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0"
-                                  Content="开机自动启动"/>
+                                  Content="{v:T 开机自动启动, En='Start with Windows'}"/>
                     </StackPanel>
                 </Border>
 
-                <TextBlock x:Name="VersionText" Style="{StaticResource HintText}" Margin="4,14,0,0"/>
+                <!-- Updates -->
+                <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 更新, En=Updates}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel Margin="0,12,0,0">
+                            <Button x:Name="CheckUpdateButton" DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}"
+                                    Padding="14,6" MinWidth="0" VerticalAlignment="Center"
+                                    Content="{v:T 检查更新, En='Check for updates'}"
+                                    AutomationProperties.AutomationId="CheckUpdateButton" Click="CheckUpdateButton_Click"/>
+                            <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="CurrentVersionText" FontSize="13"/>
+                                <TextBlock x:Name="UpdateStatus" Style="{StaticResource HintText}" AutomationProperties.AutomationId="UpdateStatus"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <CheckBox x:Name="AutoUpdateToggle" Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0"
+                                  Content="{v:T 自动检查新版本, En='Check for new versions automatically'}"/>
+                        <TextBlock Style="{StaticResource HintText}"
+                                   Text="{v:T '启动时和之后每 12 小时从 GitHub 检查一次。发现新版本时只提示你，确认后才会下载和安装。', En='Checks GitHub at startup and every 12 hours. You’re only notified; nothing is downloaded or installed until you confirm.'}"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="DataDirText" Style="{StaticResource HintText}" Margin="4,14,0,0"/>
             </StackPanel>
         </ScrollViewer>
 
-        <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}"
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}"
                 BorderThickness="0,1,0,0" Padding="24,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource SecondaryButton}" Content="取消" IsCancel="True"/>
-                <Button Style="{StaticResource PrimaryButton}" Content="保存" IsDefault="True" Margin="10,0,0,0" Click="SaveButton_Click"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="{v:T 取消, En=Cancel}" IsCancel="True"
+                        AutomationProperties.AutomationId="CancelButton"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="{v:T 保存, En=Save}" IsDefault="True" Margin="10,0,0,0"
+                        AutomationProperties.AutomationId="SaveButton" Click="SaveButton_Click"/>
             </StackPanel>
         </Border>
     </Grid>

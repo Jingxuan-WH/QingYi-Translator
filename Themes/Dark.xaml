@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Dark palette: same keys as Light.xaml. Accent fills stay dark enough for white text on them,
+         while AccentTextBrush is lighter so accent-colored text stays readable on dark surfaces. -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#5A66E0"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#6772E6"/>
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#4C57CC"/>
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#9AA3F5"/>
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#2B3056"/>
+    <SolidColorBrush x:Key="SelectionBrush" Color="#7C87F2"/>
+    <SolidColorBrush x:Key="WindowBrush" Color="#17191F"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#20232B"/>
+    <SolidColorBrush x:Key="OutputBrush" Color="#1C1F26"/>
+    <SolidColorBrush x:Key="LineBrush" Color="#2F333D"/>
+    <SolidColorBrush x:Key="InputLineBrush" Color="#3A3F4B"/>
+    <SolidColorBrush x:Key="InputHoverLineBrush" Color="#4B5160"/>
+    <SolidColorBrush x:Key="HoverBrush" Color="#2A2E38"/>
+    <SolidColorBrush x:Key="PressedBrush" Color="#333845"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E6E8EE"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A7ADBA"/>
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#767D8C"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="#F06A6A"/>
+    <SolidColorBrush x:Key="ErrorTextBrush" Color="#F4A7A7"/>
+    <SolidColorBrush x:Key="ErrorSoftBrush" Color="#3A2327"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#C94545"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#E0A82E"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#3CC47C"/>
+    <SolidColorBrush x:Key="SwitchOffBorderBrush" Color="#7A8190"/>
+    <SolidColorBrush x:Key="SwitchOffKnobBrush" Color="#A7ADBA"/>
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#3E4350"/>
+    <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#4E5463"/>
+    <SolidColorBrush x:Key="ScrollThumbPressedBrush" Color="#5E6574"/>
+    <SolidColorBrush x:Key="ToolTipBrush" Color="#3A3F4B"/>
+    <SolidColorBrush x:Key="ToolTipTextBrush" Color="#F1F3F7"/>
+    <SolidColorBrush x:Key="BackdropBrush" Color="#73000000"/>
+    <Color x:Key="ShadowColor">#000000</Color>
+
+</ResourceDictionary>
