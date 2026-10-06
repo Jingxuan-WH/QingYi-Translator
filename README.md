@@ -4,18 +4,20 @@
 
 # 轻译 QingYi Translator
 
-**轻量级 Windows 翻译工具 · DeepL 平替**
+**轻量级 Windows / macOS 翻译工具 · DeepL 平替**
 
-在任意软件里选中文字，按两下 <kbd>Ctrl</kbd>+<kbd>C</kbd>，译文立刻出现。<br>
+在任意软件里选中文字，按两下 <kbd>Ctrl</kbd>+<kbd>C</kbd>（Mac 上是 <kbd>⌘</kbd>+<kbd>C</kbd>），译文立刻出现。<br>
 支持 DeepSeek、通义千问、Kimi、智谱、豆包等 14 家大模型服务和 19 种常用语言，<br>
 用自己的 API Key 按量付费，日常翻译一段话通常不到 1 分钱。
 
 [![Release](https://img.shields.io/github/v/release/Jingxuan-WH/QingYi-Translator?label=%E4%B8%8B%E8%BD%BD&color=4F5BD5)](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)
+![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
+![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 [![License](https://img.shields.io/github/license/Jingxuan-WH/QingYi-Translator)](LICENSE)
 
-[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [使用说明](#-使用说明) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
+[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [macOS 版](#-macos-版) · [使用说明](#-使用说明) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
 
 <img src="docs/images/main.png" width="860" alt="轻译主界面：左侧英文原文，右侧 DeepSeek 生成的中文译文">
 
@@ -27,26 +29,27 @@
 
 - **熟悉的 DeepL 式界面**：左边原文、右边译文，自动判断翻译方向，译文逐字流式显示，打开就会用。
 - **任意软件一键取词**：选中文字后按 <kbd>Ctrl</kbd>+<kbd>C</kbd>+<kbd>C</kbd>（和 DeepL 一样），或按自定义快捷键 <kbd>Alt</kbd>+<kbd>Q</kbd>。只要能用 Ctrl+C 复制文字的地方都能用：浏览器、PDF 阅读器、Office……
+- **Windows 和 macOS 都有**：Mac 版是原生 Swift 应用，功能与 Windows 版一致，按 <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> 或 <kbd>⌥</kbd>+<kbd>Q</kbd> 取词，常驻菜单栏，见[macOS 版](#-macos-版)。
 - **14 家大模型服务任选**：DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、腾讯混元、百度千帆、MiniMax、OpenAI、Gemini、OpenRouter，还能用 Ollama 在本机离线翻译，或接入任意 OpenAI 兼容接口。
 - **19 种常用语言**：简体中文、繁体中文、英、日、韩、法、德、西、葡、意、俄、阿拉伯、越南、泰、印尼、土耳其、荷兰、波兰、印地语。外文默认译成中文，中文自动译成英文。
 - **术语表**：指定专业术语、人名、产品名的译法，中英双向生效；可以直接从 Excel 粘贴，也能导入导出 CSV。
 - **增量翻译**：在已有译文后面再加一段，只翻译新增的部分，前文作为上下文保证术语一致，更快也更省钱。
 - **翻译历史**：自动保存最近 100 条，可以搜索，点一下就能恢复原文和译文，不会重复花钱。
-- **深色模式**：浅色、深色或跟随 Windows 设置，标题栏也一起变色。
+- **深色模式**：浅色、深色或跟随系统设置，标题栏也一起变色。
 - **中英双语界面**：界面可以切换成 English，适合分享给外国同学和同事。
 - **自动更新**：有新版本时提示你，确认后一键下载、校验并安装，不用再手动替换文件。
 - **专治 PDF 断行**：从论文 PDF 里复制出来、被硬换行切碎的句子（包括 `trans-lation` 这种断字），会自动拼成通顺的段落再翻译。
 - **便宜，没有订阅**：用自己的 API Key 按量付费，没有月费，也没有字数额度。
 - **不弄乱剪贴板**：用 Alt+Q 取词时，翻译完会把剪贴板恢复成原来的内容。
-- **轻量、免安装**：单个 exe 约 550 KB，双击就能用；支持开机自启、托盘常驻、窗口置顶。
-- **注重隐私**：API Key 用 Windows 账户加密后保存在本机；要翻译的文字只发给你选择的服务商；没有统计，没有广告。
+- **轻量、免安装**：Windows 版是单个约 550 KB 的 exe，Mac 版是约 2 MB 的 .app，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
+- **注重隐私**：API Key 用 Windows 账户加密（Mac 上存在钥匙串）后保存在本机；要翻译的文字只发给你选择的服务商；没有统计，没有广告。
 - **完全开源**：MIT 许可证，代码随便看、随便改。
 
 ## 🚀 三分钟上手
 
 ### 1. 下载
 
-到 [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) 下载 `Translator.exe`，放进一个固定的文件夹（比如 `D:\Tools\QingYi\`），双击运行，不需要安装。
+到 [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) 下载 `Translator.exe`，放进一个固定的文件夹（比如 `D:\Tools\QingYi\`），双击运行，不需要安装。Mac 用户请下载 `QingYiTranslator-mac.zip`，安装步骤见[macOS 版](#-macos-版)。
 
 > [!NOTE]
 > 轻译基于 .NET 10。如果电脑上还没有 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)，第一次打开时会弹窗提示下载，按提示安装 **.NET Desktop Runtime（x64）** 即可，只需装一次。
@@ -68,6 +71,43 @@
 <img src="docs/images/settings.png" width="400" alt="设置窗口">
 
 完成！去任意软件里选中一段文字，按两下 <kbd>Ctrl</kbd>+<kbd>C</kbd> 试试。
+
+## 🍎 macOS 版
+
+<div align="center">
+<img src="docs/images/mac-main.png" width="860" alt="轻译 macOS 版主界面">
+<br>
+<sub>macOS 版主界面；深色模式见 <a href="docs/images/mac-dark.png">这里</a></sub>
+</div>
+
+Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯片和 Intel 都能用。界面、14 家服务商、术语表、增量翻译、历史、深色模式、中英界面和自动更新与 Windows 版完全一致，只是按键换成了 Mac 的习惯：
+
+| Windows | macOS | 作用 |
+|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>C</kbd>+<kbd>C</kbd> | <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> | 翻译选中的文字 |
+| <kbd>Alt</kbd>+<kbd>Q</kbd> | <kbd>⌥</kbd>+<kbd>Q</kbd> | 翻译选中的文字 / 打开或隐藏窗口（可在设置中修改） |
+| <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | <kbd>⌘</kbd>+<kbd>↩</kbd> | 立即翻译 / 整体重新翻译 |
+| <kbd>Ctrl</kbd>+<kbd>H</kbd> | <kbd>⌘</kbd>+<kbd>Y</kbd> | 打开或关闭翻译历史 |
+| 系统托盘 | 菜单栏的“译”图标 | 点击打开窗口，右键显示菜单 |
+
+### 安装
+
+1. 到 [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) 下载 `QingYiTranslator-mac.zip`，解压后把 `QingYi Translator.app` 拖进“应用程序”文件夹。
+2. 第一次打开时，macOS 会提示“无法验证开发者”（程序没有 Apple 开发者签名）：在应用上**右键 → 打开**，再点一次“打开”即可，以后就能正常双击了。如果提示“已损坏”，在终端里运行一次 `xattr -dr com.apple.quarantine "/Applications/QingYi Translator.app"`。
+3. 和 Windows 版一样，第一次启动会弹出设置窗口：选服务商、粘贴 API Key、点“测试连接”、保存。
+
+### 取词和权限
+
+- **<kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> 不需要任何权限**：轻译通过剪贴板的变化识别“连续两次复制”，只有同一段文字在半秒内被复制两次才会触发，日常复制不受影响。
+- 在“系统设置 › 隐私与安全性 › 辅助功能”里打开轻译后，<kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> 会改为直接监听按键（更准），<kbd>⌥</kbd>+<kbd>Q</kbd> 也能替你复制选中的文字并在翻译后恢复剪贴板。没有这个权限时，<kbd>⌥</kbd>+<kbd>Q</kbd> 只用来打开或隐藏窗口。设置里有一张“辅助功能权限”卡片显示当前状态，并能直接打开系统设置。
+- 更新到新版本后，macOS 可能把辅助功能权限视为失效（因为程序没有开发者签名）。如果取词不再起作用，到辅助功能列表里把轻译关掉再打开，或删掉重新添加即可。
+
+### 其他
+
+- 关闭窗口只是收进菜单栏，程序继续在后台等待快捷键；按 <kbd>⌘</kbd>+<kbd>Q</kbd> 或在菜单栏图标上右键选“退出”才会真正退出。
+- API Key 保存在 macOS 钥匙串，设置、术语表和历史保存在 `~/Library/Application Support/QingYiTranslator/`。更新到新版本后第一次读取 Key 时，macOS 可能询问是否允许轻译访问钥匙串，点“始终允许”即可。
+- 命令行也能用：`"/Applications/QingYi Translator.app/Contents/MacOS/QingYiTranslator" --translate "text"`（可加 `--to ja` 指定目标语言，或从标准输入读入），方便写脚本。
+- 从源码构建只需要 Xcode Command Line Tools：`cd mac && ./Scripts/build-app.sh`，生成的应用在 `mac/build/`；单元测试用 `./Scripts/test.sh`。
 
 ## 📖 使用说明
 
@@ -223,7 +263,7 @@
 <details>
 <summary><b>我的文字和 API Key 安全吗？</b></summary>
 
-- API Key 用 Windows DPAPI 加密后保存在 `%APPDATA%\QingYiTranslator\settings.json`，只有你当前的 Windows 账户能解密。
+- API Key 用 Windows DPAPI 加密后保存在 `%APPDATA%\QingYiTranslator\settings.json`，只有你当前的 Windows 账户能解密；Mac 上保存在钥匙串里。
 - 要翻译的文字只发送给你选择的翻译服务。轻译没有自己的服务器，不收集任何数据。用 Ollama 本地模型时，文字完全不离开你的电脑。
 - 翻译历史和术语表只保存在本机的 `%APPDATA%\QingYiTranslator\` 下（`history.json`、`glossary.json`）。历史可以在设置里关闭，或在历史面板里一键清空。
 - 检查更新只访问 GitHub 的公开接口，不发送任何个人信息；下载的新版本会核对 GitHub 提供的 SHA-256 校验值，只接受本项目 Releases 里的文件。
@@ -254,6 +294,14 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 
 生成的程序在 `publish/Translator.exe`。
 
+macOS 版需要 macOS 13 及以上和 Xcode Command Line Tools（`xcode-select --install`，自带 Swift 6）：
+
+```bash
+cd QingYi-Translator/mac
+./Scripts/test.sh          # 单元测试
+./Scripts/build-app.sh     # 生成 build/QingYi Translator.app 和 build/QingYiTranslator-mac.zip
+```
+
 <details>
 <summary>项目结构</summary>
 
@@ -276,7 +324,15 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 │   ├── SelfUpdater.cs         替换正在运行的程序并重启
 │   └── ...                    托盘图标、窗口位置记忆、开机自启等
 ├── Views/                     主窗口、设置、术语表、更新对话框（WPF）、主题切换
-└── Themes/                    界面样式与浅色 / 深色配色
+├── Themes/                    界面样式与浅色 / 深色配色
+└── mac/                       macOS 版（Swift Package，不需要 Xcode 工程）
+    ├── Sources/QingYiCore/    与平台无关的核心：服务商预设、流式客户端、术语表、增量翻译、历史、更新检查
+    ├── Sources/QingYiTranslator/
+    │   ├── App/               启动、窗口、菜单、快捷键调度、更新（AppDelegate.swift）
+    │   ├── Platform/          ⌘C⌘C 识别、全局快捷键（Carbon）、取词与剪贴板恢复、菜单栏图标、登录启动、自更新
+    │   └── Views/             SwiftUI 界面：主窗口、设置、术语表、更新对话框、配色
+    ├── Tests/                 核心逻辑的单元测试（Swift Testing）
+    └── Scripts/               build-app.sh（打包）、test.sh、make-icon.swift
 ```
 </details>
 
@@ -290,6 +346,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 - [x] 术语表
 - [x] 英文界面
 - [x] 自动更新
+- [x] macOS 版
 - [ ] 文档翻译（Word / PDF）
 
 有问题或建议欢迎提 [Issue](https://github.com/Jingxuan-WH/QingYi-Translator/issues)。如果轻译对你有帮助，请点个 ⭐ Star，让更多人看到它！
@@ -303,11 +360,11 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 
 ## English
 
-**QingYi (轻译)** is a lightweight translator for Windows — a DeepL-style alternative powered by large language models.
+**QingYi (轻译)** is a lightweight translator for Windows and macOS — a DeepL-style alternative powered by large language models.
 
-- **Translate anywhere** — select text in any app and press <kbd>Ctrl</kbd>+<kbd>C</kbd> twice (just like DeepL), or press <kbd>Alt</kbd>+<kbd>Q</kbd>.
+- **Translate anywhere** — select text in any app and press <kbd>Ctrl</kbd>+<kbd>C</kbd> twice (just like DeepL), or press <kbd>Alt</kbd>+<kbd>Q</kbd>. On a Mac it's <kbd>⌘</kbd>+<kbd>C</kbd> twice or <kbd>⌥</kbd>+<kbd>Q</kbd>.
 - **Familiar UI** — a DeepL-like two-pane window with automatic language detection and streaming output.
-- **English or Chinese interface, light or dark** — switch under Settings → Appearance, or follow Windows.
+- **English or Chinese interface, light or dark** — switch under Settings → Appearance, or follow the system.
 - **14 providers** — DeepSeek, Qwen, Kimi, Zhipu GLM, Doubao, SiliconFlow, Hunyuan, Qianfan, MiniMax, OpenAI, Gemini, OpenRouter, local models via Ollama, or any OpenAI-compatible endpoint. Each provider's "thinking" switch is set per its docs, so translations stay fast.
 - **19 languages** — Chinese (Simplified/Traditional), English, Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Vietnamese, Thai, Indonesian, Turkish, Dutch, Polish and Hindi.
 - **Glossary** — fix how terms and names are translated, in both directions. Paste two columns from Excel, or import/export CSV. Only terms found in the text are sent to the model.
@@ -315,11 +372,13 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 - **History** — the last 100 translations, searchable; restoring one costs nothing.
 - **Built-in updates** — you're told when a new version is out; one click downloads it, checks its SHA-256 digest and restarts.
 - **Fixes PDF line breaks** — sentences broken across lines (and hyphenated words) are joined before translation.
-- **Tiny and portable** — a single ~550 KB exe (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)), with tray icon, autostart and always-on-top.
-- **Private** — your API keys are encrypted with Windows DPAPI; text goes only to the provider you choose.
+- **Tiny and portable** — a single ~550 KB exe on Windows (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2 MB native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
+- **Private** — your API keys are encrypted with Windows DPAPI (stored in the Keychain on macOS); text goes only to the provider you choose.
 
-**Quick start:** download `Translator.exe` from [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) and run it. If your Windows isn't set to Chinese, the interface starts in English (change it under Settings → Appearance). Pick a provider, paste its API key, click **Test connection**, then **Save**.
+**Quick start:** download `Translator.exe` (Windows) or `QingYiTranslator-mac.zip` (macOS) from [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) and run it. On macOS, unzip, drag the app to Applications and use right-click → Open the first time (the app isn't notarized). If your system language isn't Chinese, the interface starts in English (change it under Settings → Appearance). Pick a provider, paste its API key, click **Test connection**, then **Save**.
 
-**Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above.
+**macOS notes:** <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> works without any permission (it watches the clipboard for a double copy). Granting Accessibility access under System Settings → Privacy & Security lets the app watch the keys directly and lets <kbd>⌥</kbd>+<kbd>Q</kbd> copy the selection for you. Closing the window keeps the app in the menu bar; quit with <kbd>⌘</kbd>+<kbd>Q</kbd>. There is also a command-line mode: `QingYiTranslator --translate "text" [--to ja]`.
+
+**Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above (Windows), or run `cd mac && ./Scripts/build-app.sh` with the Xcode Command Line Tools (macOS).
 
 Licensed under MIT. Not affiliated with DeepL SE.

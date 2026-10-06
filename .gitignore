@@ -18,3 +18,8 @@ Desktop.ini
 
 # Cloud sync clients (e.g. Baidu Netdisk) drop temporary files next to synced files
 *.baiduyun.uploading.cfg
+
+# Swift Package Manager (macOS version)
+mac/.build/
+mac/build/
+.swiftpm/
