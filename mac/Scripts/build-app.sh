@@ -10,7 +10,8 @@ CONFIG="${CONFIG:-release}"
 # SwiftPM can build for the current architecture alone. GitHub Actions (see .github/workflows/mac.yml) has Xcode.
 ARCH_FLAGS=""
 if [[ "$CONFIG" == "release" ]]; then
-    if [[ "$(xcode-select -p 2>/dev/null)" == *"Xcode.app"* ]]; then
+    # Xcode's developer directory ends in "…/Contents/Developer"; the Command Line Tools live in /Library/Developer/CommandLineTools.
+    if [[ "$(xcode-select -p 2>/dev/null)" == *"/Contents/Developer"* ]]; then
         ARCH_FLAGS="--arch arm64 --arch x86_64"
     else
         echo "note: Xcode not selected; building for $(uname -m) only (CI builds the universal binary)"
@@ -37,5 +38,5 @@ codesign --force --deep --sign - "$APP"
 
 rm -f build/QingYiTranslator-mac.zip
 ditto -c -k --keepParent "$APP" build/QingYiTranslator-mac.zip
-echo "Built $APP"
+echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/QingYiTranslator"))"
 echo "Archive: build/QingYiTranslator-mac.zip ($(du -h build/QingYiTranslator-mac.zip | cut -f1))"
