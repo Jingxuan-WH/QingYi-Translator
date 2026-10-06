@@ -2,7 +2,7 @@ import Foundation
 
 public enum AppInfo {
     /// Used when running the bare executable (no bundle), e.g. `swift run`.
-    public static let fallbackVersion = "0.3.0"
+    public static let fallbackVersion = "0.3.1"
     public static let bundleIdentifier = "com.jingxuanwh.QingYiTranslator"
 
     public static var versionText: String {
