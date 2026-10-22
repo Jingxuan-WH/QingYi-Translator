@@ -1,2 +1,5 @@
 CFBundleDisplayName = "轻译";
 CFBundleName = "轻译";
+NSMicrophoneUsageDescription = "轻译需要使用麦克风，把说话的内容实时转成文字并翻译。";
+NSSpeechRecognitionUsageDescription = "轻译在本机把语音转成文字，用于实时转录；声音不会发送到任何地方。";
+NSAudioCaptureUsageDescription = "轻译需要录制 Mac 正在播放的声音（视频、网课、会议），实时转成文字并翻译。";

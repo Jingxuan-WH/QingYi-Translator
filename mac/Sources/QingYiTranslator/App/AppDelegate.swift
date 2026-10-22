@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private(set) var glossary: Glossary!
     private(set) var history: TranslationHistory!
     private(set) var model: MainViewModel!
+    private(set) var live: LiveController!
     private(set) var activeHotkey: HotkeyGesture?
     private(set) var shortcutError: String?
     private(set) var isExiting = false
@@ -75,11 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return shortcuts
         }
         model.shortcutError = { [weak self] in self?.shortcutError }
+        live = LiveController(app: self, settings: settings, glossary: glossary)
+        model.openLive = { [weak self] in self?.live.show() }
         createMainWindow()
 
         let statusBar = StatusBar()
         statusBar.openRequested = { [weak self] in self?.showMainWindow() }
         statusBar.translateFileRequested = { [weak self] in self?.openFileTranslation(choose: true) }
+        statusBar.liveRequested = { [weak self] in self?.live.show() }
         statusBar.settingsRequested = { [weak self] in self?.openSettings() }
         statusBar.quitRequested = { [weak self] in self?.exitApp() }
         self.statusBar = statusBar
@@ -128,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var glossaryWindowForSnapshots: NSWindow? { glossaryWindow }
     var updateWindowForSnapshots: NSWindow? { updateWindow }
     var fileWindowForSnapshots: NSWindow? { fileWindow }
+    var liveWindowForSnapshots: NSWindow? { live.windowForSnapshots }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showMainWindow()
@@ -146,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationWillTerminate(_ notification: Notification) {
         isExiting = true
         persistState()
+        live?.shutdown()
         doubleCopy?.stop()
         hotkey?.unregister()
         statusBar?.remove()
@@ -200,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             saveWindowFrame()
             settings.save()
             mainWindow.orderOut(nil)
-            if settingsWindow == nil && glossaryWindow == nil && updateWindow == nil && fileWindow == nil {
+            if settingsWindow == nil && glossaryWindow == nil && updateWindow == nil && fileWindow == nil && !live.isWindowVisible {
                 NSApp.setActivationPolicy(.accessory)
             }
             notifyMinimizedToMenuBar()
@@ -322,7 +328,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             fileWindow = nil
             fileModel = nil
         }
-        if window != mainWindow, !mainWindow.isVisible, settingsWindow == nil, glossaryWindow == nil, updateWindow == nil, fileWindow == nil, !isExiting {
+        if window != mainWindow, !mainWindow.isVisible, settingsWindow == nil, glossaryWindow == nil, updateWindow == nil, fileWindow == nil,
+           !live.isWindowVisible, !isExiting {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    /// The live transcription window closed: leave the Dock like the other windows do.
+    func liveWindowClosed() {
+        if !mainWindow.isVisible, settingsWindow == nil, glossaryWindow == nil, updateWindow == nil, fileWindow == nil, !isExiting {
             NSApp.setActivationPolicy(.accessory)
         }
     }
@@ -367,6 +381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             } else {
                 shortcutError = L("快捷键设置无效，请在设置中重新设置", "The hotkey setting is invalid. Please set it again in Settings")
             }
+        }
+        if let error = live.applyHotkey(), shortcutError == nil {
+            shortcutError = error
         }
         model.refreshSettingsDisplay()
     }
@@ -662,6 +679,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         glossaryItem.keyEquivalentModifierMask = [.command, .shift]
         view.addItem(withTitle: L("整体重新翻译", "Retranslate Everything"), action: #selector(retranslateAction), keyEquivalent: "\r")
         view.addItem(withTitle: L("窗口置顶", "Keep on Top"), action: #selector(togglePinAction), keyEquivalent: "")
+        view.addItem(.separator())
+        let liveItem = view.addItem(withTitle: L("实时转录…", "Live Transcription…"), action: #selector(openLiveAction), keyEquivalent: "l")
+        liveItem.keyEquivalentModifierMask = [.command, .shift]
         viewItem.submenu = view
         main.addItem(viewItem)
 
@@ -696,5 +716,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func retranslateAction() { model.translate(force: true) }
     @objc private func togglePinAction() { model.togglePin() }
     @objc private func showMainWindowAction() { showMainWindow() }
+    @objc private func openLiveAction() { live.show() }
     @objc private func quitAction() { exitApp() }
 }

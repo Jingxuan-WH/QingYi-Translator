@@ -68,6 +68,12 @@ enum Snapshots {
         app.fileWindowForSnapshots?.close()
         await pause(0.3)
 
+        app.live.show()
+        await pause(1.2)
+        capture(app.liveWindowForSnapshots, "live.png")
+        app.liveWindowForSnapshots?.close()
+        await pause(0.3)
+
         ThemeManager.apply(AppSettings.themeDark)
         await pause(1.2)
         capture(app.mainWindowForSnapshots, "main-dark.png")
