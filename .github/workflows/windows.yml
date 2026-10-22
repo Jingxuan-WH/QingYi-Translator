@@ -1,0 +1,66 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*.cs"
+      - "*.xaml"
+      - "app.manifest"
+      - "Assets/**"
+      - "Core/**"
+      - "Platform/**"
+      - "Views/**"
+      - "Themes/**"
+      - "tests/**"
+      - "Translator.csproj"
+      - ".github/workflows/windows.yml"
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run tests
+        run: dotnet test tests/Translator.Tests/Translator.Tests.csproj -c Release
+
+      # The same command as in the README. The updater (Core/UpdateService.cs, Platform/SelfUpdater.cs)
+      # expects exactly one file named Translator.exe in the release.
+      - name: Publish
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=None -o publish
+
+      - name: Check output
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem publish -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne "Translator.exe") {
+            throw "Expected publish/ to hold only Translator.exe, found: $($files.Name -join ', ')"
+          }
+          "Translator.exe: {0:N0} bytes" -f $files[0].Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Translator-windows
+          path: publish/Translator.exe
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" publish/Translator.exe --clobber
