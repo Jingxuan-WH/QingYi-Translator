@@ -1,6 +1,7 @@
 import AppKit
 import QingYiCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MainView: View {
     @ObservedObject var model: MainViewModel
@@ -22,6 +23,18 @@ struct MainView: View {
         }
         .background(Palette.window)
         .frame(minWidth: 640, minHeight: 420)
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFile(providers) }
+    }
+
+    /// A file dropped anywhere on the window opens it for file translation.
+    private func dropFile(_ providers: [NSItemProvider]) -> Bool {
+        guard let translateFile = model.translateFile,
+              let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) else { return false }
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            guard let url else { return }
+            DispatchQueue.main.async { translateFile(url) }
+        }
+        return true
     }
 
     // ---------------- header ----------------
@@ -44,6 +57,7 @@ struct MainView: View {
             .frame(height: 52)
             .overlay(alignment: .bottom) { RoundedRectangle(cornerRadius: 1).fill(Palette.accentText).frame(height: 2).padding(.horizontal, -2) }
             .padding(.leading, 34)
+            TranslateFileHeaderButton { model.translateFile?(nil) }.padding(.leading, 18)
             Spacer(minLength: 8)
             if let release = model.availableUpdate {
                 Button(L("新版本 \(release.versionText)", "Update \(release.versionText)")) { model.showUpdate?(release) }
@@ -111,7 +125,12 @@ struct MainView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 PaneTextView(text: $model.sourceText, isEditable: true, focusRequest: model.focusRequest,
-                             onCommandReturn: { model.translate(force: true) }, onEscape: { escapePressed() })
+                             onCommandReturn: { model.translate(force: true) }, onEscape: { escapePressed() },
+                             onFileDrop: { url in
+                                 guard let translateFile = model.translateFile else { return false }
+                                 translateFile(url)
+                                 return true
+                             })
                 if model.sourceText.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(L("输入或粘贴要翻译的文本", "Type or paste text to translate"))

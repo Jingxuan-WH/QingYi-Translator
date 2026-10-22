@@ -17,7 +17,7 @@
 ![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 [![License](https://img.shields.io/github/license/Jingxuan-WH/QingYi-Translator)](LICENSE)
 
-[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [macOS 版](#-macos-版) · [使用说明](#-使用说明) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
+[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [macOS 版](#-macos-版) · [使用说明](#-使用说明) · [文件翻译](#文件翻译) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
 
 <img src="docs/images/main.png" width="860" alt="轻译主界面：左侧英文原文，右侧 DeepSeek 生成的中文译文">
 
@@ -33,6 +33,7 @@
 - **14 家大模型服务任选**：DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、腾讯混元、百度千帆、MiniMax、OpenAI、Gemini、OpenRouter，还能用 Ollama 在本机离线翻译，或接入任意 OpenAI 兼容接口。
 - **19 种常用语言**：简体中文、繁体中文、英、日、韩、法、德、西、葡、意、俄、阿拉伯、越南、泰、印尼、土耳其、荷兰、波兰、印地语。外文默认译成中文，中文自动译成英文。
 - **术语表**：指定专业术语、人名、产品名的译法，中英双向生效；可以直接从 Excel 粘贴，也能导入导出 CSV。
+- **文件翻译**：整篇翻译 PDF 论文、Word、PPT、Excel、TXT、Markdown 和 SRT 字幕，尽量保持原来的排版。翻译前先识别文档的领域和关键术语，你确认后全文统一按这些译法翻译。见[文件翻译](#文件翻译)。
 - **增量翻译**：在已有译文后面再加一段，只翻译新增的部分，前文作为上下文保证术语一致，更快也更省钱。
 - **翻译历史**：自动保存最近 100 条，可以搜索，点一下就能恢复原文和译文，不会重复花钱。
 - **深色模式**：浅色、深色或跟随系统设置，标题栏也一起变色。
@@ -41,7 +42,7 @@
 - **专治 PDF 断行**：从论文 PDF 里复制出来、被硬换行切碎的句子（包括 `trans-lation` 这种断字），会自动拼成通顺的段落再翻译。
 - **便宜，没有订阅**：用自己的 API Key 按量付费，没有月费，也没有字数额度。
 - **不弄乱剪贴板**：用 Alt+Q 取词时，翻译完会把剪贴板恢复成原来的内容。
-- **轻量、免安装**：Windows 版是单个约 550 KB 的 exe，Mac 版是约 2 MB 的 .app，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
+- **轻量、免安装**：Windows 版是单个约 8 MB 的 exe（其中大部分是读写 PDF 的组件），Mac 版是约 2 MB 的 .app，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
 - **注重隐私**：API Key 用 Windows 账户加密（Mac 上存在钥匙串）后保存在本机；要翻译的文字只发给你选择的服务商；没有统计，没有广告。
 - **完全开源**：MIT 许可证，代码随便看、随便改。
 
@@ -88,6 +89,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | <kbd>Alt</kbd>+<kbd>Q</kbd> | <kbd>⌥</kbd>+<kbd>Q</kbd> | 翻译选中的文字 / 打开或隐藏窗口（可在设置中修改） |
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | <kbd>⌘</kbd>+<kbd>↩</kbd> | 立即翻译 / 整体重新翻译 |
 | <kbd>Ctrl</kbd>+<kbd>H</kbd> | <kbd>⌘</kbd>+<kbd>Y</kbd> | 打开或关闭翻译历史 |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | <kbd>⌘</kbd>+<kbd>O</kbd> | 翻译文件 |
 | 系统托盘 | 菜单栏的“译”图标 | 点击打开窗口，右键显示菜单 |
 
 ### 安装
@@ -119,6 +121,29 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | **快捷键取词** | 选中文字，按 <kbd>Alt</kbd>+<kbd>Q</kbd> | 程序替你复制，翻译完自动恢复剪贴板。没选中文字时直接打开窗口，再按一次隐藏 |
 | **直接输入** | 在左侧输入或粘贴 | 停止输入约 0.7 秒后自动翻译，<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 立即整体重新翻译 |
 
+整篇文件的翻译见下面的[文件翻译](#文件翻译)。
+
+### 文件翻译
+
+点主窗口顶部的「翻译文件」（或按 <kbd>Ctrl</kbd>+<kbd>O</kbd>，Mac 上是 <kbd>⌘</kbd>+<kbd>O</kbd>；托盘 / 菜单栏图标的菜单里也有），选择文件，或者直接把文件拖进主窗口。
+
+1. **识别领域和术语**：轻译从文档里挑出标题、摘要、各级标题和分布在全文的若干段落（几千字），只请求一次，让模型判断文档属于什么领域（如“电气工程 · 电力系统”）、是什么文体，并列出关键术语和译法。你的术语表里用得上的条目会一起列出，并且优先。
+2. **确认**：领域、文体和每条术语都可以修改、删除或添加，也可以换目标语言；不想等的话点「跳过，直接翻译」，只按术语表翻译。
+3. **翻译**：全文分批发给模型（每批几十段，同时发几批），每一批都带上领域、文体和术语要求，保证全文用词一致。公式、代码、网址、编号和引用标记（如 [12]）保持原样。网络出错会自动重试；可以随时取消，之后点「继续翻译」时已经译好的部分不会重复付费。
+4. **完成**：译文保存在原文件旁边，命名为 `原文件名.目标语言.扩展名`，比如 `paper.zh-Hans.pdf`、`报告.en.docx`，**原文件不会被修改**，同名文件也不会被覆盖。点「打开译文」或「在资源管理器中显示」（Mac 上是「在访达中显示」）即可。
+
+| 格式 | 版式保留 | 说明 |
+|---|---|---|
+| **Word**（.docx） | 只替换文字，样式、表格、图片、页眉页脚、脚注尾注、文本框都不动 | 一段里有加粗、斜体、上下标、链接等不同格式时，译文里对应的词保持原来的格式。目录和域在 Word 里“更新域”后才会变成译文；修订会按“全部接受”处理 |
+| **PowerPoint**（.pptx） | 只替换文字，版式、动画、图片都不动 | 包括演讲者备注。译文比原文长时，文本框会自动缩小字号，避免溢出 |
+| **Excel**（.xlsx） | 只翻译文字单元格 | 数字、日期和公式不动；工作表名、图表和批注不翻译。如果公式按文字内容查找（如 VLOOKUP 一个被翻译的值），可能需要手动调整 |
+| **PDF**（文字版） | 译文写回原来的位置，字号自动缩小以放进原来的方框 | 图片、矢量图、表格线、公式都保留；支持双栏论文；参考文献默认不翻译（可以打开）。可以同时生成“双语对照”PDF（原文页和译文页交替）。扫描版 PDF 没有文字层，需要先用 OCR 软件识别 |
+| **TXT / Markdown** | 保留段落、空行和 Markdown 语法 | 代码块、行内代码、公式、链接地址不翻译 |
+| **SRT 字幕** | 保留序号和时间轴 | 按条翻译，每条字幕的译文仍在原来的时间段里 |
+
+> [!NOTE]
+> PDF 本身不记录“段落”，轻译是根据文字的位置、字号推断段落和栏的，复杂的排版（文字绕图、竖排、旋转的页面）可能不够理想。行内的数学公式会保留原来的符号，但字体会换成普通字体。版面要求高的场合，可以对照“双语对照”PDF 阅读，或者先用 Word 打开 PDF、另存为 .docx 再翻译。旧版 .doc / .ppt / .xls 请先在 Office 里另存为新格式。
+
 ### 快捷键
 
 | 快捷键 | 作用 |
@@ -127,6 +152,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | <kbd>Alt</kbd>+<kbd>Q</kbd> | 翻译选中的文字；窗口在前台时按下则隐藏窗口（可在设置中修改） |
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | 立即翻译 / 整体重新翻译 |
 | <kbd>Ctrl</kbd>+<kbd>H</kbd> | 打开或关闭翻译历史 |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | 翻译文件（也可以把文件拖进窗口） |
 | <kbd>Esc</kbd> | 关闭翻译历史；再按一次隐藏窗口 |
 
 ### 语言
@@ -182,7 +208,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 ### 托盘与窗口
 
 - 点关闭按钮不会退出，而是缩到系统托盘，快捷键照常可用。
-- 左键点托盘图标打开窗口；右键菜单可以打开设置或退出。
+- 左键点托盘图标打开窗口；右键菜单可以翻译文件、打开设置或退出。
 - 右上角的 📌 可以让窗口置顶，边读文献边翻译很方便。
 
 ### 设置项
@@ -253,6 +279,18 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 </details>
 
 <details>
+<summary><b>翻译一篇论文要花多少钱、多长时间？</b></summary>
+
+一篇 10 页左右的英文论文大约 5 万个字符，输入和输出合计十几万 token。以 DeepSeek 为例通常只要几毛钱，用时一到几分钟（取决于服务商的速度）。参考文献默认不翻译，能省下不少。Ollama 本地模型免费，但一次只处理一批，会慢一些。
+</details>
+
+<details>
+<summary><b>PDF 提示“这是扫描版 PDF”？</b></summary>
+
+这通常是扫描版或图片转成的 PDF，里面只有图像，没有文字层。可以先用 OCR 工具（如 Adobe Acrobat、WPS、ABBYY FineReader）识别成文字版 PDF 或 Word，再交给轻译翻译。加了密码保护的文件也需要先去掉密码。
+</details>
+
+<details>
 <summary><b>怎么更新到新版本？</b></summary>
 
 0.3.0 起内置自动更新：看到右上角的「新版本」按钮，点「立即更新」即可。更早的版本需要手动更新一次：到 [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) 下载新的 `Translator.exe`，右键托盘图标退出轻译后，替换原来的文件即可，设置和历史不受影响。
@@ -292,7 +330,13 @@ cd QingYi-Translator
 dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=None -o publish
 ```
 
-生成的程序在 `publish/Translator.exe`。
+生成的程序在 `publish/Translator.exe`。单元测试在 `tests/Translator.Tests/`（不包含在程序里）：
+
+```bash
+dotnet test tests/Translator.Tests/Translator.Tests.csproj
+```
+
+每次提交和 Pull Request 都会在 GitHub Actions 上自动运行 Windows 和 macOS 的测试与构建。
 
 macOS 版需要 macOS 13 及以上和 Xcode Command Line Tools（`xcode-select --install`，自带 Swift 6）：
 
@@ -316,21 +360,23 @@ cd QingYi-Translator/mac
 │   ├── Languages.cs           19 种语言与离线语言识别
 │   ├── UpdateService.cs       从 GitHub Releases 检查、下载并校验新版本
 │   ├── Loc.cs                 界面语言（中文 / English）
-│   └── AppSettings.cs         设置读写、API Key 加密（DPAPI）
+│   ├── AppSettings.cs         设置读写、API Key 加密（DPAPI）
+│   └── FileTranslation/       文件翻译：领域识别、分批翻译、各格式的读写（Office、PDF、TXT/Markdown/SRT）
 ├── Platform/
 │   ├── DoubleCopyHook.cs      Ctrl+C+C 检测（低级键盘钩子，独立线程）
 │   ├── GlobalHotkey.cs        全局快捷键（RegisterHotKey）
 │   ├── SelectionReader.cs     取词：模拟复制 + 剪贴板备份与恢复
 │   ├── SelfUpdater.cs         替换正在运行的程序并重启
 │   └── ...                    托盘图标、窗口位置记忆、开机自启等
-├── Views/                     主窗口、设置、术语表、更新对话框（WPF）、主题切换
+├── Views/                     主窗口、设置、术语表、文件翻译、更新对话框（WPF）、主题切换
 ├── Themes/                    界面样式与浅色 / 深色配色
+├── tests/Translator.Tests/    Core 的单元测试（xUnit）
 └── mac/                       macOS 版（Swift Package，不需要 Xcode 工程）
-    ├── Sources/QingYiCore/    与平台无关的核心：服务商预设、流式客户端、术语表、增量翻译、历史、更新检查
+    ├── Sources/QingYiCore/    与平台无关的核心：服务商预设、流式客户端、术语表、增量翻译、历史、更新检查、文件翻译
     ├── Sources/QingYiTranslator/
     │   ├── App/               启动、窗口、菜单、快捷键调度、更新（AppDelegate.swift）
     │   ├── Platform/          ⌘C⌘C 识别、全局快捷键（Carbon）、取词与剪贴板恢复、菜单栏图标、登录启动、自更新
-    │   └── Views/             SwiftUI 界面：主窗口、设置、术语表、更新对话框、配色
+    │   └── Views/             SwiftUI 界面：主窗口、设置、术语表、文件翻译、更新对话框、配色
     ├── Tests/                 核心逻辑的单元测试（Swift Testing）
     └── Scripts/               build-app.sh（打包）、test.sh、make-icon.swift
 ```
@@ -347,13 +393,14 @@ cd QingYi-Translator/mac
 - [x] 英文界面
 - [x] 自动更新
 - [x] macOS 版
-- [ ] 文档翻译（Word / PDF）
+- [x] 文件翻译（PDF / Word / PPT / Excel / TXT / Markdown / 字幕）
 
 有问题或建议欢迎提 [Issue](https://github.com/Jingxuan-WH/QingYi-Translator/issues)。如果轻译对你有帮助，请点个 ⭐ Star，让更多人看到它！
 
 ## 📄 许可证与声明
 
 - 本项目基于 [MIT 许可证](LICENSE) 开源。
+- 文件翻译用到的第三方库：Windows 版用 [PdfPig](https://github.com/UglyToad/PdfPig)（Apache-2.0）读取 PDF、[PDFsharp](https://github.com/empira/PDFsharp) 6.2（MIT）写入 PDF；Mac 版用 [ZIPFoundation](https://github.com/weichsel/ZIPFoundation)（MIT）读写 Office 文件，PDF 用系统自带的 PDFKit。
 - 界面设计参考了 DeepL 翻译器。本项目与 DeepL SE 没有任何关联；“DeepL” 是 DeepL SE 的商标，文中提到的其他服务名称均为其所有者的商标。
 
 ---
@@ -368,17 +415,24 @@ cd QingYi-Translator/mac
 - **14 providers** — DeepSeek, Qwen, Kimi, Zhipu GLM, Doubao, SiliconFlow, Hunyuan, Qianfan, MiniMax, OpenAI, Gemini, OpenRouter, local models via Ollama, or any OpenAI-compatible endpoint. Each provider's "thinking" switch is set per its docs, so translations stay fast.
 - **19 languages** — Chinese (Simplified/Traditional), English, Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Vietnamese, Thai, Indonesian, Turkish, Dutch, Polish and Hindi.
 - **Glossary** — fix how terms and names are translated, in both directions. Paste two columns from Excel, or import/export CSV. Only terms found in the text are sent to the model.
+- **File translation** — translate whole PDF papers, Word, PowerPoint, Excel, TXT, Markdown and SRT files while keeping their layout. The model first identifies the document's field, style and key terms; you review them, and the whole file is translated consistently. See below.
 - **Incremental translation** — append a paragraph and only the new part is sent, with the earlier paragraphs as context for consistent terminology.
 - **History** — the last 100 translations, searchable; restoring one costs nothing.
 - **Built-in updates** — you're told when a new version is out; one click downloads it, checks its SHA-256 digest and restarts.
 - **Fixes PDF line breaks** — sentences broken across lines (and hyphenated words) are joined before translation.
-- **Tiny and portable** — a single ~550 KB exe on Windows (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2 MB native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
+- **Small and portable** — a single ~8 MB exe on Windows (mostly the PDF components) (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2 MB native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
 - **Private** — your API keys are encrypted with Windows DPAPI (stored in the Keychain on macOS); text goes only to the provider you choose.
 
 **Quick start:** download `Translator.exe` (Windows) or `QingYiTranslator-mac.zip` (macOS) from [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) and run it. On macOS, unzip, drag the app to Applications and use right-click → Open the first time (the app isn't notarized). If your system language isn't Chinese, the interface starts in English (change it under Settings → Appearance). Pick a provider, paste its API key, click **Test connection**, then **Save**.
 
 **macOS notes:** <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> works without any permission (it watches the clipboard for a double copy). Granting Accessibility access under System Settings → Privacy & Security lets the app watch the keys directly and lets <kbd>⌥</kbd>+<kbd>Q</kbd> copy the selection for you. Closing the window keeps the app in the menu bar; quit with <kbd>⌘</kbd>+<kbd>Q</kbd>. There is also a command-line mode: `QingYiTranslator --translate "text" [--to ja]`.
 
-**Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above (Windows), or run `cd mac && ./Scripts/build-app.sh` with the Xcode Command Line Tools (macOS).
+**File translation:** click **Translate files** at the top of the main window (<kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>⌘</kbd>+<kbd>O</kbd>, also in the tray / menu bar menu), or drop a file on the window. The app sends a sample of the document (title, abstract, headings, a few paragraphs) once to identify the field (e.g. "Electrical Engineering · Power Systems"), style and key terms, merged with your glossary (your entries win). Edit them or skip the step, then the file is translated in batches with automatic retries; you can cancel and continue later without paying twice. The result is saved next to the original as `name.<language>.ext` (e.g. `paper.zh-Hans.pdf`); the original is never changed.
 
-Licensed under MIT. Not affiliated with DeepL SE.
+- **Word / PowerPoint / Excel** — only the text is replaced; styles, tables, images, headers/footers, footnotes, text boxes and formulas stay. Mixed formatting inside a paragraph (bold, italics, links…) follows the translated words. PowerPoint text boxes shrink the font when the translation is longer. Excel translates text cells only, not formulas or sheet names.
+- **PDF (with real text)** — the translation is written into the original text boxes, shrinking the font to fit; images, vector graphics, table lines and display formulas stay; two-column papers work; the reference list is skipped by default. Optionally also creates a bilingual PDF with original and translated pages alternating. Scanned PDFs need OCR first. Complex layouts (text wrapped around figures, rotated pages) may not come out perfectly.
+- **TXT / Markdown / SRT** — Markdown syntax, code blocks and links are kept; subtitles keep their numbers and timings.
+
+**Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above (Windows; unit tests: `dotnet test tests/Translator.Tests/Translator.Tests.csproj`), or run `cd mac && ./Scripts/build-app.sh` with the Xcode Command Line Tools (macOS; tests: `./Scripts/test.sh`).
+
+Licensed under MIT. File translation uses PdfPig (Apache-2.0) and PDFsharp 6.2 (MIT) on Windows, and ZIPFoundation (MIT) plus the system PDFKit on macOS. Not affiliated with DeepL SE.

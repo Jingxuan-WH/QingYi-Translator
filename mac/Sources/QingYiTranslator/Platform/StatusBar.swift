@@ -6,23 +6,27 @@ final class StatusBar {
     private let item: NSStatusItem
     private let menu = NSMenu()
     private let openItem: NSMenuItem
+    private let translateFileItem: NSMenuItem
     private let settingsItem: NSMenuItem
     private let quitItem: NSMenuItem
 
     var openRequested: (() -> Void)?
+    var translateFileRequested: (() -> Void)?
     var settingsRequested: (() -> Void)?
     var quitRequested: (() -> Void)?
 
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         openItem = NSMenuItem(title: "", action: #selector(open), keyEquivalent: "")
+        translateFileItem = NSMenuItem(title: "", action: #selector(translateFile), keyEquivalent: "")
         settingsItem = NSMenuItem(title: "", action: #selector(settings), keyEquivalent: "")
         quitItem = NSMenuItem(title: "", action: #selector(quit), keyEquivalent: "")
-        for menuItem in [openItem, settingsItem, quitItem] {
+        for menuItem in [openItem, translateFileItem, settingsItem, quitItem] {
             menuItem.target = self
         }
         openItem.attributedTitle = nil
         menu.addItem(openItem)
+        menu.addItem(translateFileItem)
         menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(quitItem)
@@ -38,6 +42,7 @@ final class StatusBar {
 
     func updateTexts() {
         openItem.title = L("显示主窗口", "Show window")
+        translateFileItem.title = L("翻译文件…", "Translate a file…")
         settingsItem.title = L("设置…", "Settings…")
         quitItem.title = L("退出轻译", "Quit QingYi Translator")
         item.button?.toolTip = L("轻译", "QingYi Translator")
@@ -59,6 +64,7 @@ final class StatusBar {
     }
 
     @objc private func open() { openRequested?() }
+    @objc private func translateFile() { translateFileRequested?() }
     @objc private func settings() { settingsRequested?() }
     @objc private func quit() { quitRequested?() }
 

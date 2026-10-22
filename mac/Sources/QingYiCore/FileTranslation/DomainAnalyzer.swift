@@ -2,7 +2,7 @@ import Foundation
 
 /// What the model found out about a document before translating it: the field ("电气工程"), the narrower
 /// specialty ("电力系统", may be empty), the genre and register, and key terms with their translations.
-public struct DomainProfile: Equatable {
+public struct DomainProfile: Equatable, Sendable {
     public var domain: String
     public var subdomain: String
     public var style: String
@@ -22,7 +22,7 @@ public struct DomainProfile: Equatable {
 }
 
 /// A term shown for review before translating; entries from the user's glossary are marked.
-public struct ReviewTerm: Equatable {
+public struct ReviewTerm: Equatable, Sendable {
     public var source: String
     public var target: String
     public var fromGlossary: Bool

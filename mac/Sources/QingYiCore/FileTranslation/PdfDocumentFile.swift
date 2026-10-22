@@ -10,10 +10,15 @@ import PDFKit
 /// vector graphics, table rules and formulas stay untouched. Links, bookmarks and page rotation are restored
 /// with PDFKit afterwards.
 public final class PdfDocumentFile: TranslatableDocument {
+    /// Reading two PDFs' text with PDFKit at the same time loses characters, so reading and writing take turns.
+    private static let pdfKitLock = NSRecursiveLock()
+
     private var blocks: [(page: Int, block: PdfBlock, segment: Int)] = []
 
     public init(url: URL) throws {
         super.init(sourceURL: url)
+        PdfDocumentFile.pdfKitLock.lock()
+        defer { PdfDocumentFile.pdfKitLock.unlock() }
         let document = try PdfDocumentFile.open(url)
         var allBlocks: [(page: Int, block: PdfBlock)] = []
         var glyphCount = 0, imagePages = 0, rotated = 0
@@ -52,7 +57,7 @@ public final class PdfDocumentFile: TranslatableDocument {
         let pages = document.pageCount
         if pages > 0 && ((glyphCount < 30 * pages && imagePages * 2 >= pages) || glyphCount == 0) {
             throw DocumentError(L(
-                "这是扫描版 PDF（页面是图片，没有可提取的文字），暂不支持。可以先用“预览”或 Adobe Acrobat 等软件做文字识别（OCR），再翻译识别后的文件。",
+                "这是扫描版 PDF（页面是图片，没有可提取的文字），暂不支持。可以先用 WPS、Adobe Acrobat 等软件做文字识别（OCR），再翻译识别后的文件。",
                 "This is a scanned PDF (its pages are images without text), which isn’t supported. Run text recognition (OCR) on it first, e.g. in Adobe Acrobat, then translate the result."))
         }
         if !scannedPages.isEmpty {
@@ -215,6 +220,8 @@ public final class PdfDocumentFile: TranslatableDocument {
     // ---------------- writing ----------------
 
     public override func save(to url: URL, translations: [Int: String], options: DocumentSaveOptions) throws {
+        PdfDocumentFile.pdfKitLock.lock()
+        defer { PdfDocumentFile.pdfKitLock.unlock() }
         let document = try PdfDocumentFile.open(sourceURL)
         try TranslatableDocument.writeAtomically(to: url) { temp in
             guard let context = CGContext(temp as CFURL, mediaBox: nil, nil) else {

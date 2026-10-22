@@ -55,6 +55,13 @@ final class ModelCaller: @unchecked Sendable {
     }
 }
 
+/// Runs `operation` away from the main actor; cancelling the calling task cancels it too (a plain detached task
+/// would keep running).
+private func offMain<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    let task = Task.detached(operation: operation)
+    return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+}
+
 /// Translates a whole file: pick or drop it, review the field and terms the model found, follow the progress,
 /// then open the translated copy saved next to the original.
 @MainActor
@@ -165,7 +172,7 @@ final class FileTranslationViewModel: ObservableObject {
         stage = .loading
         work = Task { [weak self] in
             do {
-                let document = try await Task.detached { try DocumentLoader.open(url) }.value
+                let document = try await offMain { try DocumentLoader.open(url) }
                 guard let self, self.workId == id else { return }
                 self.document = document
                 let caller = ModelCaller(settings: self.settings, target: self.target)
@@ -222,7 +229,7 @@ final class FileTranslationViewModel: ObservableObject {
         let answer = Loc.isEnglish ? Languages.english : Languages.simplifiedChinese
         work = Task { [weak self] in
             do {
-                let profile = try await Task.detached { try await job.analyze(target: target, answerLanguage: answer) }.value
+                let profile = try await offMain { try await job.analyze(target: target, answerLanguage: answer) }
                 guard let self, self.workId == id else { return }
                 self.showReview(profile, note: profile == nil
                     ? L("没能识别出领域（模型的回答无法解析）。可以自己填写，或直接开始翻译。", "The field couldn’t be identified (the model’s answer was unreadable). Fill it in yourself, or just start.")
@@ -293,11 +300,11 @@ final class FileTranslationViewModel: ObservableObject {
         started = Date()
         work = Task { [weak self] in
             do {
-                let result = try await Task.detached {
+                let result = try await offMain {
                     try await job.translate(options: options) { report in
                         Task { @MainActor [weak self] in self?.report(report, id: id) }
                     }
-                }.value
+                }
                 guard let self, self.workId == id else { return }
                 self.finish(result)
             } catch is CancellationError {

@@ -62,6 +62,12 @@ enum Snapshots {
         app.updateWindowForSnapshots?.close()
         await pause(0.3)
 
+        app.openFileTranslation()
+        await pause(1.2)
+        capture(app.fileWindowForSnapshots, "file-translation.png")
+        app.fileWindowForSnapshots?.close()
+        await pause(0.3)
+
         ThemeManager.apply(AppSettings.themeDark)
         await pause(1.2)
         capture(app.mainWindowForSnapshots, "main-dark.png")

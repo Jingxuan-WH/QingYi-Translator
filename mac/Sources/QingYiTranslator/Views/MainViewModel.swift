@@ -47,6 +47,8 @@ final class MainViewModel: ObservableObject {
     var openGlossary: (() -> Void)?
     var showUpdate: ((ReleaseInfo) -> Void)?
     var hideWindow: (() -> Void)?
+    /// Opens the file translation window, with the given file or (nil) asking for one.
+    var translateFile: ((URL?) -> Void)?
     var shortcutDescriptions: () -> [String] = { [] }
     var shortcutError: () -> String? = { nil }
 

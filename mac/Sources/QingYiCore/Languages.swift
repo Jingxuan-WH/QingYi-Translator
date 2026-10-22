@@ -1,7 +1,7 @@
 import Foundation
 
 /// A language the app can translate from and to.
-public struct Language: Hashable, Identifiable {
+public struct Language: Hashable, Identifiable, Sendable {
     public let code: String
     /// The Chinese name.
     public let displayName: String
