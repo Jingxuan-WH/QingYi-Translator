@@ -163,6 +163,18 @@ struct PdfDocumentTests {
         #expect(document.segments.map(\.plainText).count == 2)
         guard document.segments.count == 2 else {
             Issue.record("segments: \(document.segments.map(\.plainText))")
+            // Diagnostics for the CI log: what PDFKit reports for the first characters.
+            if let page = PDFDocument(url: url)?.page(at: 0), let string = page.string {
+                let text = string as NSString
+                print("PDFKIT numberOfCharacters=\(page.numberOfCharacters) string.length=\(text.length)")
+                for index in 0..<min(70, text.length) {
+                    let font = page.attributedString?.attribute(.font, at: index, effectiveRange: nil) as? NSFont
+                    print("PDFKIT \(index) \(text.substring(with: NSRange(location: index, length: 1)).debugDescription) \(page.characterBounds(at: index)) \(font?.fontName ?? "-") \(font?.pointSize ?? 0)")
+                }
+                for glyph in PdfDocumentFile.glyphs(of: page).prefix(40) {
+                    print("GLYPH \(glyph.text) \(glyph.x0) \(glyph.y0) \(glyph.x1) \(glyph.y1) \(glyph.fontSize)")
+                }
+            }
             return
         }
         #expect(document.segments[0].plainText == "Control of Small Power Grids")

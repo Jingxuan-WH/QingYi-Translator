@@ -46,8 +46,9 @@ public struct DocumentError: Error, LocalizedError {
     public var errorDescription: String? { message }
 }
 
-/// A document opened for translation: its segments, and how to write the translated copy.
-open class TranslatableDocument {
+/// A document opened for translation: its segments, and how to write the translated copy. It is read on a
+/// background thread and then only used by one translation job at a time.
+open class TranslatableDocument: @unchecked Sendable {
     public let sourceURL: URL
     public private(set) var segments: [DocumentSegment] = []
 
