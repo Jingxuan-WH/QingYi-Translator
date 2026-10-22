@@ -141,6 +141,10 @@
                             ToolTip="{v:T 术语表, En=Glossary}"
                             AutomationProperties.AutomationId="GlossaryButton" AutomationProperties.Name="{v:T 术语表, En=Glossary}"
                             Click="GlossaryButton_Click"/>
+                    <Button x:Name="LiveButton" Style="{StaticResource IconButton}" Content="&#xE720;" Margin="4,0,0,0"
+                            ToolTip="{v:T '实时转录：麦克风或电脑播放的声音', En='Live transcription: microphone or PC sound'}"
+                            AutomationProperties.AutomationId="LiveButton" AutomationProperties.Name="{v:T 实时转录, En='Live transcription'}"
+                            Click="LiveButton_Click"/>
                     <ToggleButton x:Name="PinButton" Style="{StaticResource IconToggleButton}" Content="&#xE718;" Margin="4,0,0,0"
                                   AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="{v:T 窗口置顶, En='Pin on top'}"
                                   Click="PinButton_Click"/>

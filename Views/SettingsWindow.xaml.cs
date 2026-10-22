@@ -67,6 +67,7 @@ public partial class SettingsWindow : Window
         CloseToTrayToggle.IsChecked = settings.CloseToTray;
         StartupToggle.IsChecked = settings.StartWithWindows;
         AutoUpdateToggle.IsChecked = settings.AutoCheckUpdates;
+        LivePanel.Load(settings, app);
         _updateStatus = DescribeLastCheck;
         RefreshLocalizedText();
 
@@ -402,6 +403,8 @@ public partial class SettingsWindow : Window
             HotkeyBox.BringIntoView();
             return;
         }
+        if (!LivePanel.Validate())
+            return;
 
         StoreProviderFields(_currentProvider);
         foreach (var (id, key) in _editedKeys)
@@ -420,6 +423,7 @@ public partial class SettingsWindow : Window
         _settings.CloseToTray = CloseToTrayToggle.IsChecked == true;
         _settings.StartWithWindows = StartupToggle.IsChecked == true;
         _settings.AutoCheckUpdates = AutoUpdateToggle.IsChecked == true;
+        LivePanel.Save(_settings);
         _settings.UiLanguage = (UiLanguageBox.SelectedItem as ChoiceOption)?.Id ?? Loc.SystemCode;
         _settings.Theme = (ThemeBox.SelectedItem as ChoiceOption)?.Id ?? AppSettings.ThemeSystem;
         _saved = true;

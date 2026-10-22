@@ -1,0 +1,51 @@
+<UserControl x:Class="Translator.Views.LiveSettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Translator.Views">
+    <StackPanel>
+        <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 实时转录, En='Live transcription'}"/>
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <DockPanel Margin="0,12,0,6">
+                    <Button x:Name="ModelsFolderButton" DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                            Content="{v:T 打开模型文件夹, En='Open models folder'}" Click="ModelsFolderButton_Click"/>
+                    <TextBlock Text="{v:T 语音识别模型, En='Speech recognition model'}" FontSize="13"/>
+                </DockPanel>
+                <ComboBox x:Name="ModelBox" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                          AutomationProperties.AutomationId="LiveModelBox" AutomationProperties.Name="{v:T 语音识别模型, En='Speech recognition model'}"
+                          SelectionChanged="ModelBox_SelectionChanged"/>
+                <TextBlock x:Name="ModelHint" Style="{StaticResource HintText}"/>
+
+                <TextBlock Style="{StaticResource FieldLabel}" Text="{v:T 模型下载源, En='Model download source'}"/>
+                <ComboBox x:Name="SourceBox" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                          AutomationProperties.Name="{v:T 模型下载源, En='Model download source'}"/>
+                <TextBlock Style="{StaticResource HintText}"
+                           Text="{v:T '国内网络建议选 hf-mirror.com 镜像。下载中断后再次下载会从断点继续，下载完成后会校验文件。', En='hf-mirror.com is usually faster from mainland China. An interrupted download resumes, and every file is verified.'}"/>
+
+                <CheckBox x:Name="GpuToggle" Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0"
+                          Content="{v:T 有显卡时用 GPU 加速, En='Use GPU acceleration when available'}" Click="GpuToggle_Click"/>
+                <TextBlock x:Name="GpuHint" Style="{StaticResource HintText}"/>
+
+                <CheckBox x:Name="HotkeyToggle" Style="{StaticResource ToggleSwitch}" Margin="0,16,0,0"
+                          Content="{v:T 用快捷键开始 / 停止实时转录, En='Use a hotkey to start / stop live transcription'}" Click="HotkeyToggle_Click"/>
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{v:T 快捷键, En=Hotkey}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBox x:Name="HotkeyBox" Grid.Column="1" Style="{StaticResource FormTextBox}"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="False" Cursor="Hand"
+                             InputMethod.IsInputMethodEnabled="False" ContextMenu="{x:Null}"
+                             ToolTip="{v:T 点击后按下新的组合键, En='Click, then press the new key combination'}"
+                             AutomationProperties.Name="{v:T 实时转录快捷键, En='Live transcription hotkey'}"
+                             PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                             GotKeyboardFocus="HotkeyBox_GotKeyboardFocus"
+                             LostKeyboardFocus="HotkeyBox_LostKeyboardFocus"/>
+                </Grid>
+                <TextBlock x:Name="HotkeyStatus" Style="{StaticResource HintText}"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -10,12 +10,14 @@ internal sealed class TrayIcon : IDisposable
     private readonly WinForms.ContextMenuStrip _menu;
     private readonly WinForms.ToolStripMenuItem _openItem;
     private readonly WinForms.ToolStripMenuItem _fileItem;
+    private readonly WinForms.ToolStripMenuItem _liveItem;
     private readonly WinForms.ToolStripMenuItem _settingsItem;
     private readonly WinForms.ToolStripMenuItem _exitItem;
     private Action? _tipClicked;
 
     public event Action? OpenRequested;
     public event Action? TranslateFileRequested;
+    public event Action? LiveRequested;
     public event Action? SettingsRequested;
     public event Action? ExitRequested;
 
@@ -29,10 +31,12 @@ internal sealed class TrayIcon : IDisposable
         };
         _openItem = CreateItem(() => OpenRequested?.Invoke(), bold: true);
         _fileItem = CreateItem(() => TranslateFileRequested?.Invoke());
+        _liveItem = CreateItem(() => LiveRequested?.Invoke());
         _settingsItem = CreateItem(() => SettingsRequested?.Invoke());
         _exitItem = CreateItem(() => ExitRequested?.Invoke());
         _menu.Items.Add(_openItem);
         _menu.Items.Add(_fileItem);
+        _menu.Items.Add(_liveItem);
         _menu.Items.Add(_settingsItem);
         _menu.Items.Add(new WinForms.ToolStripSeparator());
         _menu.Items.Add(_exitItem);
@@ -71,6 +75,7 @@ internal sealed class TrayIcon : IDisposable
     {
         _openItem.Text = Loc.T("显示主窗口", "Show window");
         _fileItem.Text = Loc.T("翻译文件…", "Translate a file…");
+        _liveItem.Text = Loc.T("实时转录…", "Live transcription…");
         _settingsItem.Text = Loc.T("设置…", "Settings…");
         _exitItem.Text = Loc.T("退出", "Exit");
         _icon.Text = Loc.T("轻译", "QingYi Translator");

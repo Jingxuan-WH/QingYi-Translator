@@ -180,6 +180,8 @@
                     </StackPanel>
                 </Border>
 
+                <v:LiveSettingsPanel x:Name="LivePanel"/>
+
                 <!-- Updates -->
                 <TextBlock Style="{StaticResource SectionTitle}" Text="{v:T 更新, En=Updates}"/>
                 <Border Style="{StaticResource Card}">

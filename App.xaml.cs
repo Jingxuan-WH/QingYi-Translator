@@ -90,6 +90,7 @@ public partial class App : Application
         _tray.OpenRequested += ShowMainWindow;
         _tray.SettingsRequested += OpenSettings;
         _tray.TranslateFileRequested += () => OpenFileTranslation(choose: true);
+        _tray.LiveRequested += OpenLiveWindow;
         _tray.ExitRequested += ExitApp;
         Loc.Changed += () => _tray?.UpdateTexts();
         ThemeManager.Changed += () => _tray?.ApplyTheme(ThemeManager.IsDark);
@@ -140,6 +141,7 @@ public partial class App : Application
             else
                 ActiveHotkey = gesture;
         }
+        ShortcutError ??= ApplyLiveHotkey();
 
         TranslatorWindow.RefreshSettingsDisplay();
     }
@@ -306,6 +308,7 @@ public partial class App : Application
         _updateTimer?.Stop();
         ThemeManager.Stop();
         _hotkey?.Dispose();
+        _liveHotkey?.Dispose();
         _doubleCopy?.Dispose();
         _tray?.Dispose();
         _showWait?.Unregister(null);
