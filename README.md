@@ -17,7 +17,7 @@
 ![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 [![License](https://img.shields.io/github/license/Jingxuan-WH/QingYi-Translator)](LICENSE)
 
-[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [macOS 版](#-macos-版) · [使用说明](#-使用说明) · [文件翻译](#文件翻译) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
+[**⬇️ 下载最新版**](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) · [三分钟上手](#-三分钟上手) · [macOS 版](#-macos-版) · [使用说明](#-使用说明) · [文件翻译](#文件翻译) · [实时转录](#-实时转录并翻译) · [支持的服务商](#-支持的服务商) · [常见问题](#-常见问题) · [English](#english)
 
 <img src="docs/images/main.png" width="860" alt="轻译主界面：左侧英文原文，右侧 DeepSeek 生成的中文译文">
 
@@ -29,6 +29,7 @@
 
 - **熟悉的 DeepL 式界面**：左边原文、右边译文，自动判断翻译方向，译文逐字流式显示，打开就会用。
 - **任意软件一键取词**：选中文字后按 <kbd>Ctrl</kbd>+<kbd>C</kbd>+<kbd>C</kbd>（和 DeepL 一样），或按自定义快捷键 <kbd>Alt</kbd>+<kbd>Q</kbd>。只要能用 Ctrl+C 复制文字的地方都能用：浏览器、PDF 阅读器、Office……
+- **实时转录并翻译**：听麦克风或电脑正在播放的声音（网课、会议、视频），在本机把语音实时转成文字，每说完一句就翻译出来，还能开一条置顶的悬浮字幕，最后导出 TXT 或 SRT 字幕，见[实时转录](#-实时转录并翻译)。
 - **Windows 和 macOS 都有**：Mac 版是原生 Swift 应用，功能与 Windows 版一致，按 <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> 或 <kbd>⌥</kbd>+<kbd>Q</kbd> 取词，常驻菜单栏，见[macOS 版](#-macos-版)。
 - **14 家大模型服务任选**：DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、腾讯混元、百度千帆、MiniMax、OpenAI、Gemini、OpenRouter，还能用 Ollama 在本机离线翻译，或接入任意 OpenAI 兼容接口。
 - **19 种常用语言**：简体中文、繁体中文、英、日、韩、法、德、西、葡、意、俄、阿拉伯、越南、泰、印尼、土耳其、荷兰、波兰、印地语。外文默认译成中文，中文自动译成英文。
@@ -42,7 +43,7 @@
 - **专治 PDF 断行**：从论文 PDF 里复制出来、被硬换行切碎的句子（包括 `trans-lation` 这种断字），会自动拼成通顺的段落再翻译。
 - **便宜，没有订阅**：用自己的 API Key 按量付费，没有月费，也没有字数额度。
 - **不弄乱剪贴板**：用 Alt+Q 取词时，翻译完会把剪贴板恢复成原来的内容。
-- **轻量、免安装**：Windows 版是单个约 8 MB 的 exe（其中大部分是读写 PDF 的组件），Mac 版下载约 2.5 MB，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
+- **轻量、免安装**：Windows 版是单个约 14 MB 的 exe（其中大部分是读写 PDF 的组件和语音识别的运行库；实时转录用的语音模型第一次使用时再下载），Mac 版下载约 3 MB，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
 - **注重隐私**：API Key 用 Windows 账户加密（Mac 上存在钥匙串）后保存在本机；要翻译的文字只发给你选择的服务商；没有统计，没有广告。
 - **完全开源**：MIT 许可证，代码随便看、随便改。
 
@@ -111,6 +112,41 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 - 命令行也能用：`"/Applications/QingYi Translator.app/Contents/MacOS/QingYiTranslator" --translate "text"`（可加 `--to ja` 指定目标语言，或从标准输入读入），方便写脚本。
 - 从源码构建只需要 Xcode Command Line Tools：`cd mac && ./Scripts/build-app.sh`，生成的应用在 `mac/build/`；单元测试用 `./Scripts/test.sh`。
 
+## 🎧 实时转录并翻译
+
+点主窗口右上角的 🎙（Mac 上是 〰 图标），或者在托盘 / 菜单栏菜单里选“实时转录…”，打开实时转录窗口：选好音源和语言，点“开始”，说话或播放视频，原文会一句一句出现，译文紧跟在下面。
+
+- **音源**：麦克风、电脑正在播放的声音（网课、会议、视频），或者两者同时。麦克风可以选具体的设备。
+- **本机识别，声音不上传**：语音识别完全在本机进行，只有识别出来的文字会发给你选的翻译服务。Windows 版用 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（通过 Whisper.net），Mac 版用系统自带的语音识别。
+- **实时显示**：说话过程中先出灰色的临时结果，会随着识别不断修正；停顿下来后变成最终结果并开始翻译，一般 1～2 秒。翻译沿用当前的服务商、附加要求和术语表，并把前面几句作为上下文，前后更连贯。
+- **语言**：可以指定说话的语言，也可以自动检测。Windows 版自动检测所有 Whisper 支持的语言；Mac 版的自动检测在中文和英文之间判断（同时用两个识别器，每句选更可信的结果）。目标语言单独设置，规则和主窗口一样：说的本来就是目标语言时自动改为译成英文 / 中文。
+- **临时结果预翻译**：打开后，说话过程中也会翻译还在变化的文字（灰色），停顿 0.7 秒才发请求，会多用一些额度。
+- **悬浮字幕**：一条半透明的置顶字幕条，显示最近一两句原文和译文，可以拖到任意位置，鼠标移上去可以调字号或关闭。适合一边看视频或开会一边看翻译。
+- **导出**：TXT（原文、译文或双语，带时间）或 SRT 字幕（原文、译文或双语），可以直接拖进播放器。
+- **快捷键**（可选）：在设置里打开“用快捷键开始 / 停止实时转录”，默认 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd>（Mac 上是 <kbd>⌃</kbd>+<kbd>⌥</kbd>+<kbd>L</kbd>）。
+- 往上翻看前面的内容时不会被新句子打断，点“回到最新”继续跟随。关闭窗口会停止聆听并释放麦克风和模型，转录内容在退出轻译前都还在。
+
+### Windows：语音模型
+
+第一次点“开始”时会提示下载语音识别模型，下载后保存在 `%LOCALAPPDATA%\QingYiTranslator\models`，以后离线使用。可以在设置的“实时转录”里换模型：
+
+| 模型 | 大小 | 说明 |
+|---|---|---|
+| base | 约 142 MB | 最快，CPU 也能实时；准确度一般 |
+| small（默认） | 约 466 MB | 速度和准确度均衡，中文、英文都不错 |
+| large-v3-turbo（q5_0 量化） | 约 547 MB | 最准确；建议有独立显卡时使用 |
+
+- **下载源**：可以选 Hugging Face 或国内镜像 hf-mirror.com（默认：中文系统用镜像）。下载中断后再次下载会从断点继续，下载完成后会核对 whisper.cpp 官方公布的 SHA-1 校验值，不一致的文件会被删除。
+- **GPU 加速**：检测到支持 Vulkan 的显卡（NVIDIA、AMD、Intel 都可以）时，会询问是否下载约 36 MB 的 GPU 加速组件（来自 NuGet 的 Whisper.net.Runtime.Vulkan，可走华为云镜像，下载后核对 SHA-512）；没有显卡或不下载时自动用 CPU。设置里可以关掉 GPU 加速。
+- 语音识别引擎需要微软的 Visual C++ 运行库（大多数电脑已经装过）；没有时窗口会提示并提供微软官方的下载链接。
+- Windows 隐私设置不允许桌面应用使用麦克风时，窗口里会说明并提供“打开隐私设置”按钮。
+
+### Mac：系统语音识别和权限
+
+- macOS 26 及以上用新的 SpeechAnalyzer，第一次使用某种语言时会提示下载它的模型（由系统下载和管理）；更早的系统用 SFSpeechRecognizer 的离线识别，需要在“系统设置 › 键盘 › 听写”中添加对应语言，系统会下载离线模型，窗口里会给出提示和直达按钮。
+- 需要的权限：麦克风、语音识别（macOS 26 之前），以及录制系统声音——macOS 14.2 及以上是“屏幕与系统录音”里的系统录音权限，13～14.1 用“屏幕录制”权限（授权后需要重新打开轻译）。被拒绝时窗口会说明原因，并能一键打开系统设置的对应页面。
+- 轻译没有 Apple 开发者签名，**更新后 macOS 可能不再认可之前的授权**（开关看起来是开着的，但实际没有权限）。这时点提示里的“重置权限”（或设置里的“重置权限”），再点“开始”重新授权即可。
+
 ## 📖 使用说明
 
 ### 三种翻译方式
@@ -121,7 +157,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | **快捷键取词** | 选中文字，按 <kbd>Alt</kbd>+<kbd>Q</kbd> | 程序替你复制，翻译完自动恢复剪贴板。没选中文字时直接打开窗口，再按一次隐藏 |
 | **直接输入** | 在左侧输入或粘贴 | 停止输入约 0.7 秒后自动翻译，<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 立即整体重新翻译 |
 
-整篇文件的翻译见下面的[文件翻译](#文件翻译)。
+整篇文件的翻译见下面的[文件翻译](#文件翻译)；听声音实时转文字和翻译见上面的[实时转录](#-实时转录并翻译)。
 
 ### 文件翻译
 
@@ -154,6 +190,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | <kbd>Ctrl</kbd>+<kbd>H</kbd> | 打开或关闭翻译历史 |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | 翻译文件（也可以把文件拖进窗口） |
 | <kbd>Esc</kbd> | 关闭翻译历史；再按一次隐藏窗口 |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd> | 开始 / 停止实时转录（需要先在设置中打开，可以修改） |
 
 ### 语言
 
@@ -222,6 +259,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | 术语表 | 指定术语的译法，可随时停用 |
 | 快捷键 | 可以关闭 Ctrl+C+C，或把 Alt+Q 换成其他组合（需包含 Ctrl、Alt 或 Win）；设置页会提示快捷键是否已被其他程序占用 |
 | 常规 | 输入时自动翻译、保存翻译历史、取词后恢复剪贴板、关闭时最小化到托盘、开机自动启动 |
+| 实时转录 | 语音识别模型、模型下载源、GPU 加速、开始 / 停止实时转录的快捷键 |
 | 更新 | 查看当前版本、手动检查更新、开关自动检查 |
 
 ## 🌐 支持的服务商
@@ -305,6 +343,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 - 要翻译的文字只发送给你选择的翻译服务。轻译没有自己的服务器，不收集任何数据。用 Ollama 本地模型时，文字完全不离开你的电脑。
 - 翻译历史和术语表只保存在本机的 `%APPDATA%\QingYiTranslator\` 下（`history.json`、`glossary.json`）。历史可以在设置里关闭，或在历史面板里一键清空。
 - 检查更新只访问 GitHub 的公开接口，不发送任何个人信息；下载的新版本会核对 GitHub 提供的 SHA-256 校验值，只接受本项目 Releases 里的文件。
+- 实时转录的语音识别完全在本机进行，声音不会上传，也不会保存到磁盘；只有识别出来的文字会发给你选的翻译服务。转录内容只在你导出时才写入文件。
 - 为了识别 Ctrl+C+C，程序使用了系统键盘钩子，但只判断 C 键和 Ctrl/Alt/Win 键的状态，不记录任何按键内容，代码见 [`Platform/DoubleCopyHook.cs`](Platform/DoubleCopyHook.cs)。
 </details>
 
@@ -360,6 +399,11 @@ cd QingYi-Translator/mac
 │   ├── Languages.cs           19 种语言与离线语言识别
 │   ├── UpdateService.cs       从 GitHub Releases 检查、下载并校验新版本
 │   ├── Loc.cs                 界面语言（中文 / English）
+│   ├── SpeechSegmenter.cs     实时转录：按音量和停顿切句（VAD）
+│   ├── AudioMixer.cs          实时转录：混合麦克风和系统声音
+│   ├── LiveTranscript.cs      实时转录：临时结果与最终结果的合并、翻译上下文
+│   ├── TranscriptExport.cs    导出 TXT / SRT
+│   ├── WhisperModels.cs       语音模型清单、断点续传下载与校验
 │   ├── AppSettings.cs         设置读写、API Key 加密（DPAPI）
 │   └── FileTranslation/       文件翻译：领域识别、分批翻译、各格式的读写（Office、PDF、TXT/Markdown/SRT）
 ├── Platform/
@@ -367,15 +411,19 @@ cd QingYi-Translator/mac
 │   ├── GlobalHotkey.cs        全局快捷键（RegisterHotKey）
 │   ├── SelectionReader.cs     取词：模拟复制 + 剪贴板备份与恢复
 │   ├── SelfUpdater.cs         替换正在运行的程序并重启
+│   ├── AudioCapture.cs        WASAPI 录音（麦克风、系统声音 loopback）与重采样
+│   ├── LiveTranscriber.cs     实时转录的后台流水线：混音 → 切句 → Whisper
+│   ├── WhisperEngine.cs       whisper.cpp 运行库（内置 CPU 版，按需下载 GPU 版）与识别
 │   └── ...                    托盘图标、窗口位置记忆、开机自启等
-├── Views/                     主窗口、设置、术语表、文件翻译、更新对话框（WPF）、主题切换
+├── Views/                     主窗口、设置、术语表、文件翻译、更新对话框、实时转录窗口与悬浮字幕（WPF）、主题切换
 ├── Themes/                    界面样式与浅色 / 深色配色
 ├── tests/Translator.Tests/    Core 的单元测试（xUnit）
 └── mac/                       macOS 版（Swift Package，不需要 Xcode 工程）
-    ├── Sources/QingYiCore/    与平台无关的核心：服务商预设、流式客户端、术语表、增量翻译、历史、更新检查、文件翻译
+    ├── Sources/QingYiCore/    与平台无关的核心：服务商预设、流式客户端、术语表、增量翻译、历史、更新检查、文件翻译、实时转录的切句与导出
     ├── Sources/QingYiTranslator/
     │   ├── App/               启动、窗口、菜单、快捷键调度、更新（AppDelegate.swift）
     │   ├── Platform/          ⌘C⌘C 识别、全局快捷键（Carbon）、取词与剪贴板恢复、菜单栏图标、登录启动、自更新
+    │   ├── Live/              实时转录：录音（AVAudioEngine、Core Audio process tap、ScreenCaptureKit）、语音识别、权限、窗口与悬浮字幕
     │   └── Views/             SwiftUI 界面：主窗口、设置、术语表、文件翻译、更新对话框、配色
     ├── Tests/                 核心逻辑的单元测试（Swift Testing）
     └── Scripts/               build-app.sh（打包）、test.sh、make-icon.swift
@@ -394,6 +442,7 @@ cd QingYi-Translator/mac
 - [x] 自动更新
 - [x] macOS 版
 - [x] 文件翻译（PDF / Word / PPT / Excel / TXT / Markdown / 字幕）
+- [x] 实时转录并翻译（麦克风 / 电脑声音）
 
 有问题或建议欢迎提 [Issue](https://github.com/Jingxuan-WH/QingYi-Translator/issues)。如果轻译对你有帮助，请点个 ⭐ Star，让更多人看到它！
 
@@ -401,6 +450,7 @@ cd QingYi-Translator/mac
 
 - 本项目基于 [MIT 许可证](LICENSE) 开源。
 - 文件翻译用到的第三方库：Windows 版用 [PdfPig](https://github.com/UglyToad/PdfPig)（Apache-2.0）读取 PDF、[PDFsharp](https://github.com/empira/PDFsharp) 6.2（MIT）写入 PDF；Mac 版用 [ZIPFoundation](https://github.com/weichsel/ZIPFoundation)（MIT）读写 Office 文件，PDF 用系统自带的 PDFKit。
+- 实时转录用到的第三方库：Windows 版用 [NAudio](https://github.com/naudio/NAudio)（MIT）录音、[Whisper.net](https://github.com/sandrohanea/whisper.net)（MIT）调用 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（MIT）做语音识别，语音模型来自 [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)（MIT）；Mac 版只用系统框架。
 - 界面设计参考了 DeepL 翻译器。本项目与 DeepL SE 没有任何关联；“DeepL” 是 DeepL SE 的商标，文中提到的其他服务名称均为其所有者的商标。
 
 ---
@@ -410,6 +460,7 @@ cd QingYi-Translator/mac
 **QingYi (轻译)** is a lightweight translator for Windows and macOS — a DeepL-style alternative powered by large language models.
 
 - **Translate anywhere** — select text in any app and press <kbd>Ctrl</kbd>+<kbd>C</kbd> twice (just like DeepL), or press <kbd>Alt</kbd>+<kbd>Q</kbd>. On a Mac it's <kbd>⌘</kbd>+<kbd>C</kbd> twice or <kbd>⌥</kbd>+<kbd>Q</kbd>.
+- **Live transcription and translation** — listens to the microphone and/or whatever the computer is playing (lectures, meetings, videos), transcribes on the device and translates each sentence as it ends. Partial results appear in grey and get corrected; optional floating captions; export to TXT or SRT. Windows uses whisper.cpp (models of 142–547 MB are downloaded on first use from Hugging Face or the hf-mirror.com mirror, with resume and checksum verification; GPU acceleration through Vulkan is an optional 36 MB download). The Mac uses the system's speech recognition (SpeechAnalyzer on macOS 26, offline SFSpeechRecognizer before that). No audio leaves the computer; only the recognized text goes to your translation provider.
 - **Familiar UI** — a DeepL-like two-pane window with automatic language detection and streaming output.
 - **English or Chinese interface, light or dark** — switch under Settings → Appearance, or follow the system.
 - **14 providers** — DeepSeek, Qwen, Kimi, Zhipu GLM, Doubao, SiliconFlow, Hunyuan, Qianfan, MiniMax, OpenAI, Gemini, OpenRouter, local models via Ollama, or any OpenAI-compatible endpoint. Each provider's "thinking" switch is set per its docs, so translations stay fast.
@@ -420,12 +471,14 @@ cd QingYi-Translator/mac
 - **History** — the last 100 translations, searchable; restoring one costs nothing.
 - **Built-in updates** — you're told when a new version is out; one click downloads it, checks its SHA-256 digest and restarts.
 - **Fixes PDF line breaks** — sentences broken across lines (and hyphenated words) are joined before translation.
-- **Small and portable** — a single ~8 MB exe on Windows (mostly the PDF components; needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2.5 MB download for the native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
+- **Small and portable** — a single ~14 MB exe on Windows (mostly the PDF components and the speech recognition runtime; speech models are downloaded on first use; needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~3 MB download for the native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
 - **Private** — your API keys are encrypted with Windows DPAPI (stored in the Keychain on macOS); text goes only to the provider you choose.
 
 **Quick start:** download `Translator.exe` (Windows) or `QingYiTranslator-mac.zip` (macOS) from [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) and run it. On macOS, unzip, drag the app to Applications and use right-click → Open the first time (the app isn't notarized). If your system language isn't Chinese, the interface starts in English (change it under Settings → Appearance). Pick a provider, paste its API key, click **Test connection**, then **Save**.
 
 **macOS notes:** <kbd>⌘</kbd>+<kbd>C</kbd>+<kbd>C</kbd> works without any permission (it watches the clipboard for a double copy). Granting Accessibility access under System Settings → Privacy & Security lets the app watch the keys directly and lets <kbd>⌥</kbd>+<kbd>Q</kbd> copy the selection for you. Closing the window keeps the app in the menu bar; quit with <kbd>⌘</kbd>+<kbd>Q</kbd>. There is also a command-line mode: `QingYiTranslator --translate "text" [--to ja]`.
+
+**Live transcription permissions on macOS:** microphone, speech recognition (before macOS 26) and system audio recording (macOS 14.2+; Screen Recording on 13–14.1). Because the app isn't notarized, macOS may stop honoring these after an update; use **Reset permissions** in the live window or in Settings and allow them again.
 
 **File translation:** click **Translate files** at the top of the main window (<kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>⌘</kbd>+<kbd>O</kbd>, also in the tray / menu bar menu), or drop a file on the window. The app sends a sample of the document (title, abstract, headings, a few paragraphs) once to identify the field (e.g. "Electrical Engineering · Power Systems"), style and key terms, merged with your glossary (your entries win). Edit them or skip the step, then the file is translated in batches with automatic retries; you can cancel and continue later without paying twice. The result is saved next to the original as `name.<language>.ext` (e.g. `paper.zh-Hans.pdf`); the original is never changed.
 
@@ -435,4 +488,4 @@ cd QingYi-Translator/mac
 
 **Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above (Windows; unit tests: `dotnet test tests/Translator.Tests/Translator.Tests.csproj`), or run `cd mac && ./Scripts/build-app.sh` with the Xcode Command Line Tools (macOS; tests: `./Scripts/test.sh`).
 
-Licensed under MIT. File translation uses PdfPig (Apache-2.0) and PDFsharp 6.2 (MIT) on Windows, and ZIPFoundation (MIT) plus the system PDFKit on macOS. Not affiliated with DeepL SE.
+Licensed under MIT. File translation uses PdfPig (Apache-2.0) and PDFsharp 6.2 (MIT) on Windows, and ZIPFoundation (MIT) plus the system PDFKit on macOS. Live transcription uses NAudio and Whisper.net / whisper.cpp (all MIT) on Windows, and only system frameworks on macOS. Not affiliated with DeepL SE.
