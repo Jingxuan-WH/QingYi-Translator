@@ -142,7 +142,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 | **SRT 字幕** | 保留序号和时间轴 | 按条翻译，每条字幕的译文仍在原来的时间段里 |
 
 > [!NOTE]
-> PDF 本身不记录“段落”，轻译是根据文字的位置、字号推断段落和栏的，复杂的排版（文字绕图、竖排、旋转的页面）可能不够理想。行内的数学公式会保留原来的符号，但字体会换成普通字体。版面要求高的场合，可以对照“双语对照”PDF 阅读，或者先用 Word 打开 PDF、另存为 .docx 再翻译。旧版 .doc / .ppt / .xls 请先在 Office 里另存为新格式。
+> PDF 本身不记录“段落”，轻译是根据文字的位置、字号推断段落和栏的，复杂的排版（文字绕图、竖排、旋转的页面）可能不够理想。行内的数学公式会保留原来的符号，但字体会换成普通字体。Windows 版会把原文从 PDF 里删掉；Mac 版是用背景色把原文盖住，原文的文字层仍在下面，在译文 PDF 里复制或搜索时可能混入原文。版面要求高的场合，可以对照“双语对照”PDF 阅读，或者先用 Word 打开 PDF、另存为 .docx 再翻译。旧版 .doc / .ppt / .xls 请先在 Office 里另存为新格式。
 
 ### 快捷键
 
@@ -430,7 +430,7 @@ cd QingYi-Translator/mac
 **File translation:** click **Translate files** at the top of the main window (<kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>⌘</kbd>+<kbd>O</kbd>, also in the tray / menu bar menu), or drop a file on the window. The app sends a sample of the document (title, abstract, headings, a few paragraphs) once to identify the field (e.g. "Electrical Engineering · Power Systems"), style and key terms, merged with your glossary (your entries win). Edit them or skip the step, then the file is translated in batches with automatic retries; you can cancel and continue later without paying twice. The result is saved next to the original as `name.<language>.ext` (e.g. `paper.zh-Hans.pdf`); the original is never changed.
 
 - **Word / PowerPoint / Excel** — only the text is replaced; styles, tables, images, headers/footers, footnotes, text boxes and formulas stay. Mixed formatting inside a paragraph (bold, italics, links…) follows the translated words. PowerPoint text boxes shrink the font when the translation is longer. Excel translates text cells only, not formulas or sheet names.
-- **PDF (with real text)** — the translation is written into the original text boxes, shrinking the font to fit; images, vector graphics, table lines and display formulas stay; two-column papers work; the reference list is skipped by default. Optionally also creates a bilingual PDF with original and translated pages alternating. Scanned PDFs need OCR first. Complex layouts (text wrapped around figures, rotated pages) may not come out perfectly.
+- **PDF (with real text)** — the translation is written into the original text boxes, shrinking the font to fit; images, vector graphics, table lines and display formulas stay; two-column papers work; the reference list is skipped by default. Optionally also creates a bilingual PDF with original and translated pages alternating. Scanned PDFs need OCR first. Complex layouts (text wrapped around figures, rotated pages) may not come out perfectly. On macOS the original text is covered rather than removed, so copying or searching the translated PDF may pick it up too.
 - **TXT / Markdown / SRT** — Markdown syntax, code blocks and links are kept; subtitles keep their numbers and timings.
 
 **Build from source:** install the .NET 10 SDK and run the `dotnet publish` command shown above (Windows; unit tests: `dotnet test tests/Translator.Tests/Translator.Tests.csproj`), or run `cd mac && ./Scripts/build-app.sh` with the Xcode Command Line Tools (macOS; tests: `./Scripts/test.sh`).

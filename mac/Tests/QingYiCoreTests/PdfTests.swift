@@ -124,6 +124,17 @@ struct PdfLayoutTests {
 }
 
 struct PdfDocumentTests {
+    /// True when the characters of `part` appear in `text` in this order. The covered original stays in the page
+    /// underneath the translation, so text extracted from it interleaves the two.
+    private func containsInOrder(_ text: String, _ part: String) -> Bool {
+        var rest = Substring(text)
+        for c in part where !c.isWhitespace {
+            guard let index = rest.firstIndex(of: c) else { return false }
+            rest = rest[rest.index(after: index)...]
+        }
+        return true
+    }
+
     /// A one-page PDF drawn with CoreText: a title, a three-line paragraph on a light blue box, and a rule.
     private func samplePdf() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("qy-pdf-\(UUID().uuidString)")
@@ -176,9 +187,9 @@ struct PdfDocumentTests {
 
         let result = try #require(PDFDocument(url: output))
         #expect(result.pageCount == 1)
-        let text = (result.page(at: 0)?.string ?? "").replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\n", with: "")
-        #expect(text.contains("GRIDCONTROL"))
-        #expect(text.contains("TRANSLATEDPARAGRAPH"))
+        let text = result.page(at: 0)?.string ?? ""
+        #expect(containsInOrder(text, "GRID CONTROL"))
+        #expect(containsInOrder(text, "TRANSLATED PARAGRAPH"))
         #expect(PDFDocument(url: bilingual)?.pageCount == 2)
     }
 
@@ -192,8 +203,8 @@ struct PdfDocumentTests {
         }
         try document.save(to: output, translations: translations, options: DocumentSaveOptions(target: Languages.simplifiedChinese))
         let text = PDFDocument(url: output)?.page(at: 0)?.string ?? ""
-        #expect(text.contains("小型电网的控制"))
-        #expect(text.contains("独立运行"))
+        #expect(containsInOrder(text, "小型电网的控制"))
+        #expect(containsInOrder(text, "独立运行"))
     }
 
     @Test func scannedPdfsAreRejected() throws {
