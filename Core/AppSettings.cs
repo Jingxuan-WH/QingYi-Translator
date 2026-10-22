@@ -88,6 +88,8 @@ public sealed class AppSettings
     /// <summary>Tag of the last release announced with a tray notification, so each one is announced only once.</summary>
     public string? NotifiedUpdateVersion { get; set; }
 
+    public LiveSettings Live { get; set; } = new();
+
     public const string ThemeSystem = "system";
     public const string ThemeLight = "light";
     public const string ThemeDark = "dark";
@@ -179,6 +181,8 @@ public sealed class AppSettings
             UiLanguage = Loc.SystemCode;
         if (Theme is not (ThemeLight or ThemeDark))
             Theme = ThemeSystem;
+        Live ??= new();
+        Live.Normalize();
     }
 }
 
