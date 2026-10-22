@@ -3,7 +3,7 @@ import Foundation
 
 /// Two equivalent terms. Works both ways: whichever side appears in the text is translated as the other.
 /// The JSON keys match the Windows version, so a copied glossary.json loads as is.
-public struct GlossaryEntry: Codable, Hashable {
+public struct GlossaryEntry: Codable, Hashable, Sendable {
     public var source: String
     public var target: String
 

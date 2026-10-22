@@ -24,7 +24,7 @@ public struct TranslationRequest {
     }
 }
 
-public struct TranslationResult {
+public struct TranslationResult: Sendable {
     public let text: String
     public let finishReason: String?
 }

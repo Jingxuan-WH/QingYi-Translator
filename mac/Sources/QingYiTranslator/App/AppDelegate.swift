@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var glossaryPasteMonitor: Any?
     private var updateWindow: NSWindow?
     private var updateModel: UpdateViewModel?
+    private var fileWindow: NSWindow?
+    private var fileModel: FileTranslationViewModel?
     private var statusBar: StatusBar?
     private var doubleCopy: DoubleCopyWatcher!
     private var hotkey: GlobalHotkey!
@@ -64,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         model.openGlossary = { [weak self] in self?.openGlossary(from: self?.mainWindow) }
         model.showUpdate = { [weak self] release in self?.showUpdateDialog(release, from: self?.mainWindow) }
         model.hideWindow = { [weak self] in self?.hideMainWindow() }
+        model.translateFile = { [weak self] url in self?.openFileTranslation(url: url, choose: url == nil) }
         model.shortcutDescriptions = { [weak self] in
             guard let self else { return [] }
             var shortcuts: [String] = []
@@ -76,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         let statusBar = StatusBar()
         statusBar.openRequested = { [weak self] in self?.showMainWindow() }
+        statusBar.translateFileRequested = { [weak self] in self?.openFileTranslation(choose: true) }
         statusBar.settingsRequested = { [weak self] in self?.openSettings() }
         statusBar.quitRequested = { [weak self] in self?.exitApp() }
         self.statusBar = statusBar
@@ -123,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var settingsWindowForSnapshots: NSWindow? { settingsWindow }
     var glossaryWindowForSnapshots: NSWindow? { glossaryWindow }
     var updateWindowForSnapshots: NSWindow? { updateWindow }
+    var fileWindowForSnapshots: NSWindow? { fileWindow }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showMainWindow()
@@ -195,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             saveWindowFrame()
             settings.save()
             mainWindow.orderOut(nil)
-            if settingsWindow == nil && glossaryWindow == nil && updateWindow == nil {
+            if settingsWindow == nil && glossaryWindow == nil && updateWindow == nil && fileWindow == nil {
                 NSApp.setActivationPolicy(.accessory)
             }
             notifyMinimizedToMenuBar()
@@ -264,6 +269,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             updateModel.cancelDownload()
             return false
         }
+        if sender == fileWindow, let fileModel, fileModel.isTranslating, !isExiting {
+            guard Dialogs.confirm(sender, heading: L("正在翻译文件", "A file is being translated"),
+                                  message: L("关闭窗口会取消翻译，已经翻译的部分不会保存。", "Closing the window cancels the translation; nothing is saved."),
+                                  confirmText: L("取消翻译并关闭", "Cancel and close"), danger: true) else { return false }
+            fileModel.cancel()
+        }
         return true
     }
 
@@ -306,8 +317,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         } else if window == updateWindow {
             updateWindow = nil
             updateModel = nil
+        } else if window == fileWindow {
+            fileModel?.cancel()
+            fileWindow = nil
+            fileModel = nil
         }
-        if window != mainWindow, !mainWindow.isVisible, settingsWindow == nil, glossaryWindow == nil, updateWindow == nil, !isExiting {
+        if window != mainWindow, !mainWindow.isVisible, settingsWindow == nil, glossaryWindow == nil, updateWindow == nil, fileWindow == nil, !isExiting {
             NSApp.setActivationPolicy(.accessory)
         }
     }
@@ -477,6 +492,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Translates a whole file in its own window. `url` starts with that file; `choose` asks for one first.
+    func openFileTranslation(url: URL? = nil, choose: Bool = false) {
+        let vm: FileTranslationViewModel
+        if let window = fileWindow, let model = fileModel {
+            vm = model
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            vm = FileTranslationViewModel(settings: settings, glossary: glossary)
+            vm.openSettings = { [weak self] in self?.openSettings() }
+            NSApp.setActivationPolicy(.regular)
+            let window = makeWindow(title: L("翻译文件", "Translate a File"), size: NSSize(width: 720, height: 620), minSize: NSSize(width: 560, height: 460),
+                                    over: mainWindow.isVisible ? mainWindow : nil)
+            window.contentView = NSHostingView(rootView: FileTranslationView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
+                .environmentObject(Loc.shared))
+            fileWindow = window
+            fileModel = vm
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        if let url {
+            vm.open(url)
+        } else if choose {
+            // After the window is up, so the open panel appears over it.
+            DispatchQueue.main.async { [weak self] in vm.chooseFile(from: self?.fileWindow) }
+        }
+    }
+
     private func makeWindow(title: String, size: NSSize, minSize: NSSize, over owner: NSWindow?) -> NSWindow {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.title = title
@@ -593,6 +635,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         appItem.submenu = appMenu
         main.addItem(appItem)
 
+        let fileItem = NSMenuItem()
+        let file = NSMenu(title: L("文件", "File"))
+        file.addItem(withTitle: L("翻译文件…", "Translate a File…"), action: #selector(translateFileAction), keyEquivalent: "o")
+        fileItem.submenu = file
+        main.addItem(fileItem)
+
         let editItem = NSMenuItem()
         let edit = NSMenu(title: L("编辑", "Edit"))
         edit.addItem(withTitle: L("撤销", "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
@@ -643,6 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func openSettingsAction() { openSettings() }
     @objc private func openGlossaryAction() { openGlossary(from: NSApp.keyWindow) }
+    @objc private func translateFileAction() { openFileTranslation(choose: true) }
     @objc private func toggleHistoryAction() { model.toggleHistory() }
     @objc private func retranslateAction() { model.translate(force: true) }
     @objc private func togglePinAction() { model.togglePin() }

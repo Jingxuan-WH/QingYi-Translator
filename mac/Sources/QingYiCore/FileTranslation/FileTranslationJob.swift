@@ -3,7 +3,7 @@ import Foundation
 /// Sends one request: a system prompt and a user message, returning the model's whole answer.
 public typealias CompletionCall = @Sendable (_ systemPrompt: String, _ userMessage: String) async throws -> TranslationResult
 
-public struct FileTranslationProgress: Equatable {
+public struct FileTranslationProgress: Equatable, Sendable {
     public let done: Int
     public let total: Int
 
@@ -15,7 +15,7 @@ public struct FileTranslationProgress: Equatable {
 
 /// `profile`: field, style and terms the user confirmed; nil when they skipped that step.
 /// `terms`: the terms to enforce (the user's glossary entries and the confirmed detected terms).
-public struct FileTranslationOptions {
+public struct FileTranslationOptions: Sendable {
     public var target: Language
     public var profile: DomainProfile?
     public var terms: [GlossaryEntry]
@@ -34,7 +34,7 @@ public struct FileTranslationOptions {
     }
 }
 
-public struct FileTranslationResult {
+public struct FileTranslationResult: Sendable {
     public let outputURL: URL
     public let bilingualURL: URL?
     public let translated: Int

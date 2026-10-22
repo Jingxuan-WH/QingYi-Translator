@@ -181,6 +181,8 @@ struct PaneTextView: NSViewRepresentable {
     var focusRequest = 0
     var onCommandReturn: (() -> Void)?
     var onEscape: (() -> Void)?
+    /// Files dropped on the pane go here instead of being inserted as a path (file translation).
+    var onFileDrop: ((URL) -> Bool)?
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -228,6 +230,7 @@ struct PaneTextView: NSViewRepresentable {
         coordinator.parent = self
         textView.onCommandReturn = onCommandReturn
         textView.onEscape = onEscape
+        textView.onFileDrop = onFileDrop
         textView.isEditable = isEditable
         textView.isSelectable = true
         if textView.font?.pointSize != fontSize {
@@ -288,6 +291,7 @@ struct PaneTextView: NSViewRepresentable {
 final class KeyAwareTextView: NSTextView {
     var onCommandReturn: (() -> Void)?
     var onEscape: (() -> Void)?
+    var onFileDrop: ((URL) -> Bool)?
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 36, event.modifierFlags.contains(.command), let onCommandReturn {
@@ -307,6 +311,27 @@ final class KeyAwareTextView: NSTextView {
 
     // Pasting formatted text keeps only the plain text.
     override func paste(_ sender: Any?) { pasteAsPlainText(sender) }
+
+    private func droppedFile(_ info: NSDraggingInfo) -> URL? {
+        guard onFileDrop != nil else { return nil }
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        return urls?.first
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFile(sender) != nil ? .copy : super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFile(sender) != nil ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let url = droppedFile(sender), let onFileDrop, onFileDrop(url) {
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
 }
 
 /// A one-line text field that forwards Return and Tab-like navigation. Plain SwiftUI TextField suffices for most forms.
