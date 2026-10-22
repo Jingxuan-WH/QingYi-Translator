@@ -31,4 +31,13 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- File translation: PdfPig (Apache-2.0) reads PDF text and layout, PDFsharp (MIT) writes the translated PDF.
+         PDFsharp is pinned: from 6.5.0 on it is licensed under the AGPL, which this MIT project can't use. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="PDFsharp" Version="[6.2.4]" />
+    <!-- PDFsharp 6.2.4 asks for 8.0.1, which has known vulnerabilities; this patched version replaces it. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
 </Project>
