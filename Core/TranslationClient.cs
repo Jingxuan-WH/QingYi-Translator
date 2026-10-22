@@ -13,8 +13,9 @@ namespace Translator.Core;
 /// <param name="Source">Null lets the model identify the source language itself.</param>
 /// <param name="Context">Earlier paragraphs of the same text and their translations, for consistent terminology.</param>
 /// <param name="Glossary">The user's glossary entries that occur in <paramref name="Text"/>.</param>
+/// <param name="SystemPrompt">Replaces the built-in prompt (file translation brings its own rules).</param>
 public sealed record TranslationRequest(string Text, Language? Source, Language Target, IReadOnlyList<TranslationTurn> Context,
-    IReadOnlyList<GlossaryEntry>? Glossary = null);
+    IReadOnlyList<GlossaryEntry>? Glossary = null, string? SystemPrompt = null);
 
 public sealed record TranslationResult(string Text, string? FinishReason);
 
@@ -216,7 +217,7 @@ public sealed class TranslationClient
     {
         var messages = new JsonArray
         {
-            Message("system", BuildSystemPrompt(request.Source, request.Target, extraInstructions, request.Context.Count > 0, request.Glossary)),
+            Message("system", request.SystemPrompt ?? BuildSystemPrompt(request.Source, request.Target, extraInstructions, request.Context.Count > 0, request.Glossary)),
         };
         foreach (var turn in request.Context)
         {
