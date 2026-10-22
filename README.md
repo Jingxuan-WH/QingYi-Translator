@@ -42,7 +42,7 @@
 - **专治 PDF 断行**：从论文 PDF 里复制出来、被硬换行切碎的句子（包括 `trans-lation` 这种断字），会自动拼成通顺的段落再翻译。
 - **便宜，没有订阅**：用自己的 API Key 按量付费，没有月费，也没有字数额度。
 - **不弄乱剪贴板**：用 Alt+Q 取词时，翻译完会把剪贴板恢复成原来的内容。
-- **轻量、免安装**：Windows 版是单个约 8 MB 的 exe（其中大部分是读写 PDF 的组件），Mac 版是约 2 MB 的 .app，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
+- **轻量、免安装**：Windows 版是单个约 8 MB 的 exe（其中大部分是读写 PDF 的组件），Mac 版下载约 2.5 MB，双击就能用；支持开机自启、托盘 / 菜单栏常驻、窗口置顶。
 - **注重隐私**：API Key 用 Windows 账户加密（Mac 上存在钥匙串）后保存在本机；要翻译的文字只发给你选择的服务商；没有统计，没有广告。
 - **完全开源**：MIT 许可证，代码随便看、随便改。
 
@@ -420,7 +420,7 @@ cd QingYi-Translator/mac
 - **History** — the last 100 translations, searchable; restoring one costs nothing.
 - **Built-in updates** — you're told when a new version is out; one click downloads it, checks its SHA-256 digest and restarts.
 - **Fixes PDF line breaks** — sentences broken across lines (and hyphenated words) are joined before translation.
-- **Small and portable** — a single ~8 MB exe on Windows (mostly the PDF components) (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2 MB native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
+- **Small and portable** — a single ~8 MB exe on Windows (mostly the PDF components; needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)) or a ~2.5 MB download for the native Swift app on macOS 13+, with tray / menu bar icon, autostart and always-on-top.
 - **Private** — your API keys are encrypted with Windows DPAPI (stored in the Keychain on macOS); text goes only to the provider you choose.
 
 **Quick start:** download `Translator.exe` (Windows) or `QingYiTranslator-mac.zip` (macOS) from [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) and run it. On macOS, unzip, drag the app to Applications and use right-click → Open the first time (the app isn't notarized). If your system language isn't Chinese, the interface starts in English (change it under Settings → Appearance). Pick a provider, paste its API key, click **Test connection**, then **Save**.
