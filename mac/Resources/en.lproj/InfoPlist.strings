@@ -1,2 +1,5 @@
 CFBundleDisplayName = "QingYi Translator";
 CFBundleName = "QingYi Translator";
+NSMicrophoneUsageDescription = "QingYi Translator listens to the microphone to transcribe and translate speech live.";
+NSSpeechRecognitionUsageDescription = "QingYi Translator turns speech into text on this Mac for live transcription; no audio is sent anywhere.";
+NSAudioCaptureUsageDescription = "QingYi Translator records the sound your Mac plays (videos, lectures, meetings) to transcribe and translate it live.";

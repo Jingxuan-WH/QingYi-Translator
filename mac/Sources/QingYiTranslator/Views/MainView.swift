@@ -67,6 +67,8 @@ struct MainView: View {
             }
             IconButton(symbol: "clock", help: L("翻译历史 (⌘Y)", "History (⌘Y)"), isOn: model.isHistoryOpen) { model.toggleHistory() }
             IconButton(symbol: "book", help: L("术语表", "Glossary")) { model.openGlossary?() }.padding(.leading, 4)
+            IconButton(symbol: "waveform", help: L("实时转录：麦克风或电脑播放的声音", "Live transcription: microphone or Mac sound")) { model.openLive?() }
+                .padding(.leading, 4)
             IconButton(symbol: model.topmost ? "pin.fill" : "pin", help: model.topmost ? L("取消置顶", "Unpin") : L("窗口置顶", "Keep on top"),
                        isOn: model.topmost) { model.togglePin() }.padding(.leading, 4)
             IconButton(symbol: "gearshape", help: L("设置 (⌘,)", "Settings (⌘,)")) { model.openSettings?() }.padding(.leading, 4)

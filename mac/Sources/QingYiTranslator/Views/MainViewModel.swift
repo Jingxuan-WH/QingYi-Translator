@@ -45,6 +45,7 @@ final class MainViewModel: ObservableObject {
     /// Wired up by the app delegate.
     var openSettings: (() -> Void)?
     var openGlossary: (() -> Void)?
+    var openLive: (() -> Void)?
     var showUpdate: ((ReleaseInfo) -> Void)?
     var hideWindow: (() -> Void)?
     /// Opens the file translation window, with the given file or (nil) asking for one.

@@ -45,6 +45,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var updateStatusColor = Palette.textTertiary
     @Published var checkingUpdates = false
     @Published var glossaryStatus = ""
+    let live: LiveSettingsDraft
 
     private(set) var saved = false
     private var subscriptions = Set<AnyCancellable>()
@@ -67,6 +68,7 @@ final class SettingsViewModel: ObservableObject {
         closeToMenuBar = settings.closeToMenuBar
         launchAtLogin = settings.launchAtLogin
         autoCheckUpdates = settings.autoCheckUpdates
+        live = LiveSettingsDraft(settings: settings, app: app, mainHotkey: { [weak app] in app?.activeHotkey })
         loadProviderFields(currentProvider)
         hotkeyText = hotkey?.description ?? ""
         updateHotkeyStatus()
@@ -75,7 +77,10 @@ final class SettingsViewModel: ObservableObject {
 
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.accessibilityTrusted = Accessibility.isTrusted }
+            .sink { [weak self] _ in
+                self?.accessibilityTrusted = Accessibility.isTrusted
+                self?.live.refreshPermissions()
+            }
             .store(in: &subscriptions)
         Loc.shared.$isEnglish.dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.onInterfaceLanguageChanged() }
@@ -272,6 +277,9 @@ final class SettingsViewModel: ObservableObject {
             setHotkeyStatus(L("请先设置快捷键，或者关闭这个选项", "Set a hotkey first, or turn this option off"), isError: true)
             return false
         }
+        if !live.validate() {
+            return false
+        }
         storeProviderFields(currentProvider)
         for (id, key) in editedKeys {
             settings.setApiKey(key, for: id)
@@ -289,6 +297,7 @@ final class SettingsViewModel: ObservableObject {
         settings.closeToMenuBar = closeToMenuBar
         settings.launchAtLogin = launchAtLogin
         settings.autoCheckUpdates = autoCheckUpdates
+        live.apply(to: settings)
         settings.uiLanguage = uiLanguage
         settings.theme = theme
         saved = true
@@ -304,6 +313,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func onInterfaceLanguageChanged() {
+        live.onInterfaceLanguageChanged()
         updateHotkeyStatus()
         updateStatus = describeLastCheck()
         refreshGlossaryStatus()
@@ -325,6 +335,7 @@ struct SettingsView: View {
                     service
                     shortcuts
                     permissions
+                    LiveSettingsSection(draft: model.live)
                     preferences
                     general
                     updates

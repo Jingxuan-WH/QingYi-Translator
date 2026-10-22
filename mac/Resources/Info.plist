@@ -28,13 +28,21 @@
 	<string>13.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>QingYi Translator records the sound your Mac plays (videos, lectures, meetings) to transcribe and translate it live.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT License · Jingxuan-WH</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>QingYi Translator listens to the microphone to transcribe and translate speech live.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>QingYi Translator turns speech into text on this Mac for live transcription; no audio is sent anywhere.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>UIDesignRequiresCompatibility</key>
+	<true/>
 </dict>
 </plist>
