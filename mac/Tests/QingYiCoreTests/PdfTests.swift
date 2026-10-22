@@ -164,18 +164,19 @@ struct PdfDocumentTests {
         #expect(document.segments.map(\.plainText).count == 2)
         guard document.segments.count == 2 else {
             Issue.record("segments: \(document.segments.map(\.plainText))")
-            // Diagnostics for the CI log: the same steps again on a fresh document, one at a time.
-            if let page = PDFDocument(url: url)?.page(at: 0) {
+            print("TAGGED \(document.segments.map(\.text.text))")
+            // Diagnostics for the CI log: the steps of the initializer, with the document kept alive as it does.
+            if let document = PDFDocument(url: url), let page = document.page(at: 0) {
                 let glyphs = PdfDocumentFile.glyphs(of: page)
-                print("GLYPHS \(glyphs.map(\.text).joined())")
-                for glyph in glyphs.prefix(70) {
-                    print("GLYPH \(glyph.text) \(glyph.x0) \(glyph.y0) \(glyph.x1) \(glyph.y1) \(glyph.fontSize) \(glyph.fontName)")
+                print("ALIVE \(glyphs.map(\.text).joined())")
+                for glyph in glyphs.prefix(90) {
+                    print("AGLYPH \(glyph.text) \(glyph.x0) \(glyph.y0) \(glyph.x1) \(glyph.y1) \(glyph.fontSize) [\(glyph.fontName)] math=\(PdfLayout.isMathGlyph(glyph)) bold=\(glyph.isBold)")
                 }
                 for block in PdfLayout.analyze(glyphs, pageWidth: 595, pageHeight: 842) {
-                    print("BLOCK \(block.lines.count) \(block.text)")
+                    print("ABLOCK \(block.lines.count) formula=\(block.isFormula) \(block.pieces)")
                 }
+                withExtendedLifetime(document) {}
             }
-            print("AGAIN \(try PdfDocumentFile(url: url).segments.map(\.plainText))")
             return
         }
         #expect(document.segments[0].plainText == "Control of Small Power Grids")
