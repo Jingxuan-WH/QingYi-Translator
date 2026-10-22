@@ -28,6 +28,7 @@ public partial class App : Application
     private SettingsWindow? _settingsWindow;
     private GlossaryWindow? _glossaryWindow;
     private UpdateWindow? _updateWindow;
+    private FileTranslationWindow? _fileWindow;
     private DispatcherTimer? _updateTimer;
     private bool _capturing;
     private bool _checkingForUpdates;
@@ -88,6 +89,7 @@ public partial class App : Application
         _tray.ApplyTheme(ThemeManager.IsDark);
         _tray.OpenRequested += ShowMainWindow;
         _tray.SettingsRequested += OpenSettings;
+        _tray.TranslateFileRequested += () => OpenFileTranslation(choose: true);
         _tray.ExitRequested += ExitApp;
         Loc.Changed += () => _tray?.UpdateTexts();
         ThemeManager.Changed += () => _tray?.ApplyTheme(ThemeManager.IsDark);
@@ -230,6 +232,37 @@ public partial class App : Application
         Settings.GlossaryEnabled = window.GlossaryEnabled;
         Settings.Save();
         TranslatorWindow.OnSettingsChanged();
+    }
+
+    /// <summary>
+    /// Opens the file translation window (it isn't modal, so the translator stays usable) and loads
+    /// <paramref name="path"/>, or shows the file dialog when <paramref name="choose"/> is set.
+    /// </summary>
+    internal void OpenFileTranslation(string? path = null, bool choose = false)
+    {
+        if (_fileWindow is null)
+        {
+            var window = new FileTranslationWindow(Settings, Glossary);
+            // Centered on the main window when it is showing, like the other dialogs; otherwise on the primary screen.
+            Rect area = TranslatorWindow.IsVisible && TranslatorWindow.WindowState != WindowState.Minimized
+                ? new Rect(TranslatorWindow.Left, TranslatorWindow.Top, TranslatorWindow.ActualWidth, TranslatorWindow.ActualHeight)
+                : SystemParameters.WorkArea;
+            window.Left = area.Left + Math.Max(0, (area.Width - window.Width) / 2);
+            window.Top = area.Top + Math.Max(0, (area.Height - window.Height) / 2);
+            window.Closed += (_, _) => _fileWindow = null;
+            _fileWindow = window;
+            window.Show();
+        }
+        else
+        {
+            if (_fileWindow.WindowState == WindowState.Minimized)
+                _fileWindow.WindowState = WindowState.Normal;
+            _fileWindow.Activate();
+        }
+        if (path is not null)
+            _fileWindow.OpenFile(path);
+        else if (choose)
+            _fileWindow.ChooseFile();
     }
 
     internal void NotifyMinimizedToTray()

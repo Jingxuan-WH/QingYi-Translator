@@ -1,0 +1,189 @@
+<Window x:Class="Translator.Views.FileTranslationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Translator.Views"
+        Title="{v:T 翻译文件, En='Translate a file'}"
+        Width="720" Height="640" MinWidth="560" MinHeight="460"
+        WindowStartupLocation="Manual"
+        Background="{DynamicResource WindowBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource UiFont}"
+        UseLayoutRounding="True"
+        AllowDrop="True"
+        Icon="/Assets/app.ico">
+
+    <Window.Resources>
+        <DataTemplate x:Key="TermTemplate">
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="36"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Style="{StaticResource FormTextBox}" MinHeight="32" Text="{Binding Source, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="{v:T 术语, En=Term}"/>
+                <TextBlock Grid.Column="1" Text="&#xE8AB;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextTertiaryBrush}"/>
+                <TextBox Grid.Column="2" Style="{StaticResource FormTextBox}" MinHeight="32" Text="{Binding Target, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="{v:T 译法, En=Translation}"/>
+                <Border x:Name="Badge" Grid.Column="3" Margin="8,0,0,0" Padding="7,2" CornerRadius="9" VerticalAlignment="Center"
+                        Background="{DynamicResource AccentSoftBrush}" Visibility="Collapsed"
+                        ToolTip="{v:T '来自你的术语表，优先使用', En='From your glossary; it takes priority'}">
+                    <TextBlock Text="{v:T 术语表, En=Glossary}" FontSize="11" Foreground="{DynamicResource AccentTextBrush}"/>
+                </Border>
+                <Button Grid.Column="4" Style="{StaticResource IconButton}" Width="30" Height="30" FontSize="12" HorizontalAlignment="Right"
+                        Content="&#xE74D;" Tag="{Binding}" ToolTip="{v:T 删除, En=Delete}" AutomationProperties.Name="{v:T 删除, En=Delete}"
+                        Click="DeleteTerm_Click"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding FromGlossary}" Value="True">
+                    <Setter TargetName="Badge" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- The file -->
+        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1" Padding="24,14">
+            <DockPanel>
+                <Button x:Name="ChangeFileButton" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" FontSize="13" VerticalAlignment="Center"
+                        Content="{v:T 选择其他文件…, En='Choose another file…'}" AutomationProperties.AutomationId="ChangeFileButton"
+                        Click="ChooseFile_Click"/>
+                <Border Width="38" Height="38" CornerRadius="9" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
+                    <TextBlock x:Name="FileIcon" Text="&#xE8A5;" FontFamily="{StaticResource IconFont}" FontSize="18"
+                               Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Margin="12,0,12,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="FileNameText" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               AutomationProperties.AutomationId="FileNameText"/>
+                    <TextBlock x:Name="FileInfoText" Margin="0,2,0,0" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="FileInfoText"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Pick a file -->
+        <Border x:Name="PickPanel" Grid.Row="1" Margin="24" CornerRadius="12" BorderThickness="1.5" Cursor="Hand"
+                BorderBrush="{DynamicResource InputLineBrush}" Background="{DynamicResource SurfaceBrush}"
+                MouseLeftButtonUp="PickPanel_MouseLeftButtonUp" AutomationProperties.AutomationId="PickPanel">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24">
+                <TextBlock Text="&#xE8B5;" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource AccentTextBrush}"/>
+                <TextBlock Margin="0,14,0,0" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           Text="{v:T 把文件拖到这里，或点击选择文件, En='Drop a file here, or click to choose one'}"/>
+                <TextBlock Margin="0,8,0,0" FontSize="13" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="460"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{v:T '支持 PDF（文字版）、Word、PowerPoint、Excel、TXT、Markdown 和 SRT 字幕。译文另存在原文件旁边，原文件不会被修改。', En='PDF (with real text), Word, PowerPoint, Excel, TXT, Markdown and SRT subtitles. The translation is saved next to the original, which is never changed.'}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Busy: reading the file or analyzing it -->
+        <StackPanel x:Name="BusyPanel" Grid.Row="1" Margin="48,0" VerticalAlignment="Center" Visibility="Collapsed">
+            <TextBlock x:Name="BusyText" FontSize="15" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                       AutomationProperties.AutomationId="BusyText"/>
+            <ProgressBar x:Name="BusyBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" Width="320" IsIndeterminate="True"/>
+            <TextBlock x:Name="BusyHint" Margin="0,12,0,0" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{DynamicResource TextTertiaryBrush}"/>
+        </StackPanel>
+
+        <!-- Review the field, style and terms -->
+        <ScrollViewer x:Name="ReviewPanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="24,6,24,18">
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{v:T 翻译成, En='Translate into'}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <ComboBox x:Name="TargetBox" Grid.Column="1" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
+                              AutomationProperties.AutomationId="FileTargetBox" AutomationProperties.Name="{v:T 目标语言, En='Target language'}"/>
+                    <TextBlock x:Name="SourceLanguageText" Grid.Column="2" Margin="14,0,0,0" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource SectionTitle}" Margin="0,20,0,4" Text="{v:T 领域与文体, En='Field and style'}"/>
+                <TextBlock x:Name="AnalysisNote" Style="{StaticResource HintText}" Margin="0,0,0,8" FontSize="12.5"
+                           Text="{v:T '模型根据文档摘录识别出下面的信息，翻译时会据此选用术语和行文风格。可以直接修改。', En='The model identified the following from excerpts of the document; the translation follows it. You can edit it.'}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{v:T 领域, En=Field}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBox x:Name="DomainBox" Grid.Column="1" Style="{StaticResource FormTextBox}"
+                             AutomationProperties.AutomationId="DomainBox" AutomationProperties.Name="{v:T 领域, En=Field}"/>
+                    <TextBlock Grid.Row="1" Text="{v:T 文体, En=Style}" FontSize="13" VerticalAlignment="Center" Margin="0,8,12,0"/>
+                    <TextBox x:Name="StyleBox" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource FormTextBox}"
+                             AutomationProperties.AutomationId="StyleBox" AutomationProperties.Name="{v:T 文体, En=Style}"/>
+                </Grid>
+
+                <DockPanel Margin="0,20,0,4">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" FontSize="13" VerticalAlignment="Bottom"
+                            Content="{v:T '+ 添加术语', En='+ Add a term'}" AutomationProperties.AutomationId="AddTermButton" Click="AddTerm_Click"/>
+                    <TextBlock x:Name="TermsTitle" Style="{StaticResource SectionTitle}" Margin="0"/>
+                </DockPanel>
+                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,10" FontSize="12.5"
+                           Text="{v:T '全文的这些术语都会按这里的译法翻译。标着“术语表”的来自你的术语表，优先于识别出的术语。这里的修改只用于这次翻译。', En='These terms are translated this way throughout. Entries marked “Glossary” come from your glossary and take priority over detected terms. Changes here apply to this translation only.'}"/>
+                <ItemsControl x:Name="TermsList" ItemTemplate="{StaticResource TermTemplate}" AutomationProperties.AutomationId="TermsList"/>
+                <TextBlock x:Name="NoTermsText" Style="{StaticResource HintText}" Margin="0,2,0,0" Visibility="Collapsed"
+                           Text="{v:T 没有术语。, En='No terms.'}"/>
+
+                <TextBlock Style="{StaticResource SectionTitle}" Margin="0,20,0,4" Text="{v:T 选项, En=Options}"/>
+                <CheckBox x:Name="SkipReferencesToggle" Style="{StaticResource ToggleSwitch}" Margin="0,8,0,0" IsChecked="True"
+                          Content="{v:T '不翻译参考文献列表（节省费用，引用信息保持原样）', En='Don’t translate the reference list (saves cost; citations stay as they are)'}"
+                          AutomationProperties.AutomationId="SkipReferencesToggle"/>
+                <CheckBox x:Name="BilingualToggle" Style="{StaticResource ToggleSwitch}" Margin="0,12,0,0"
+                          Content="{v:T '同时生成双语对照 PDF（原文页和译文页交替，适合版面复杂的文档）', En='Also create a bilingual PDF (original and translated pages alternate; handy for complex layouts)'}"
+                          AutomationProperties.AutomationId="BilingualToggle"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Translating, done or failed -->
+        <StackPanel x:Name="ResultPanel" Grid.Row="1" Margin="48,0" VerticalAlignment="Center" Visibility="Collapsed">
+            <TextBlock x:Name="ResultIcon" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center" Visibility="Collapsed"/>
+            <TextBlock x:Name="ResultHeading" Margin="0,10,0,0" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center" AutomationProperties.AutomationId="ResultHeading"/>
+            <ProgressBar x:Name="TranslateBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" Width="360" Minimum="0" Maximum="1"/>
+            <TextBlock x:Name="ResultText" Margin="0,12,0,0" FontSize="13" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{DynamicResource TextSecondaryBrush}" AutomationProperties.AutomationId="ResultText"/>
+            <TextBlock x:Name="WarningText" Margin="0,10,0,0" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{DynamicResource WarningBrush}" Visibility="Collapsed" AutomationProperties.AutomationId="WarningText"/>
+            <StackPanel x:Name="OpenButtons" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0" Visibility="Collapsed">
+                <Button Style="{StaticResource PrimaryButton}" Content="{v:T 打开译文, En='Open translation'}"
+                        AutomationProperties.AutomationId="OpenOutputButton" Click="OpenOutput_Click"/>
+                <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Content="{v:T 在资源管理器中显示, En='Show in Explorer'}"
+                        AutomationProperties.AutomationId="ShowInExplorerButton" Click="ShowInExplorer_Click"/>
+                <Button x:Name="OpenBilingualButton" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Visibility="Collapsed"
+                        Content="{v:T 打开双语对照版, En='Open bilingual version'}" Click="OpenBilingual_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="24,12">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="SecondaryButton" Style="{StaticResource SecondaryButton}" Visibility="Collapsed"
+                            AutomationProperties.AutomationId="FileSecondaryButton" Click="SecondaryButton_Click"/>
+                    <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Visibility="Collapsed" IsDefault="True"
+                            AutomationProperties.AutomationId="FilePrimaryButton" Click="PrimaryButton_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="FooterText" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" Margin="0,0,12,0"
+                           Foreground="{DynamicResource TextTertiaryBrush}" AutomationProperties.AutomationId="FileFooterText"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
