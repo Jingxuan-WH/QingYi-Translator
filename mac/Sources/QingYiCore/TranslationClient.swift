@@ -4,19 +4,23 @@ import Foundation
 ///   - source: Nil lets the model identify the source language itself.
 ///   - context: Earlier paragraphs of the same text and their translations, for consistent terminology.
 ///   - glossary: The user's glossary entries that occur in `text`.
+///   - systemPrompt: Replaces the built-in prompt (file translation brings its own rules).
 public struct TranslationRequest {
     public var text: String
     public var source: Language?
     public var target: Language
     public var context: [TranslationTurn]
     public var glossary: [GlossaryEntry]
+    public var systemPrompt: String?
 
-    public init(text: String, source: Language?, target: Language, context: [TranslationTurn] = [], glossary: [GlossaryEntry] = []) {
+    public init(text: String, source: Language?, target: Language, context: [TranslationTurn] = [], glossary: [GlossaryEntry] = [],
+                systemPrompt: String? = nil) {
         self.text = text
         self.source = source
         self.target = target
         self.context = context
         self.glossary = glossary
+        self.systemPrompt = systemPrompt
     }
 }
 
@@ -238,8 +242,8 @@ public final class TranslationClient {
     static func buildBody(preset: ProviderPreset, model: String, extraInstructions: String, request: TranslationRequest,
                           includeOptional: Bool) throws -> Data {
         var messages: [[String: Any]] = [
-            ["role": "system", "content": buildSystemPrompt(source: request.source, target: request.target, extraInstructions: extraInstructions,
-                                                            hasContext: !request.context.isEmpty, glossary: request.glossary)],
+            ["role": "system", "content": request.systemPrompt ?? buildSystemPrompt(source: request.source, target: request.target, extraInstructions: extraInstructions,
+                                                                                    hasContext: !request.context.isEmpty, glossary: request.glossary)],
         ]
         for turn in request.context {
             messages.append(["role": "user", "content": turn.source])
