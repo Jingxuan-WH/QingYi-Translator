@@ -10,15 +10,10 @@ import PDFKit
 /// vector graphics, table rules and formulas stay untouched. Links, bookmarks and page rotation are restored
 /// with PDFKit afterwards.
 public final class PdfDocumentFile: TranslatableDocument {
-    /// Reading two PDFs' text with PDFKit at the same time loses characters, so reading and writing take turns.
-    private static let pdfKitLock = NSRecursiveLock()
-
     private var blocks: [(page: Int, block: PdfBlock, segment: Int)] = []
 
     public init(url: URL) throws {
         super.init(sourceURL: url)
-        PdfDocumentFile.pdfKitLock.lock()
-        defer { PdfDocumentFile.pdfKitLock.unlock() }
         let document = try PdfDocumentFile.open(url)
         var allBlocks: [(page: Int, block: PdfBlock)] = []
         var glyphCount = 0, imagePages = 0, rotated = 0
@@ -103,50 +98,114 @@ public final class PdfDocumentFile: TranslatableDocument {
 
     // ---------------- reading ----------------
 
+    /// One character as PDFKit reports it, before its box is rebuilt from the line's baseline.
+    private struct RawChar {
+        var text: String
+        var box: CGRect
+        var points: Double // the font size in the text attributes; 0 when there are none
+        var fontName: String
+        var color: Int
+        var spaceAfter = false
+        var breakBefore = false
+    }
+
     /// The characters of a page with their boxes, font and colour. Spaces stay out; the gaps between words show them.
+    /// Text, box and font come from the same one-character selection: `page.string` can contain characters that
+    /// `characterBounds(at:)` doesn't count, which would give every following character its neighbour's box.
+    /// PDFKit reports either the font's full height or just the ink of each letter, so the boxes are rebuilt from
+    /// each line's baseline and font size, as on Windows: [baseline − 0.25 × size, baseline + 0.8 × size].
     static func glyphs(of page: PDFPage) -> [PdfGlyph] {
-        guard let string = page.string else { return [] }
-        let text = string as NSString
-        let count = min(text.length, page.numberOfCharacters)
-        let attributed = page.attributedString
-        var result: [PdfGlyph] = []
-        var spaceAfter: [Bool] = []
-        var index = 0
-        while index < count {
-            var range = NSRange(location: index, length: 1)
-            if UTF16.isLeadSurrogate(text.character(at: index)) && index + 1 < count {
-                range.length = 2
-            }
-            index += range.length
-            let value = text.substring(with: range)
+        var chars: [RawChar] = []
+        var pendingBreak = false
+        for index in 0..<page.numberOfCharacters {
+            guard let selection = page.selection(for: NSRange(location: index, length: 1)), let value = selection.string, !value.isEmpty else { continue }
             if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if !spaceAfter.isEmpty {
-                    spaceAfter[spaceAfter.count - 1] = true
+                if value.contains(where: \.isNewline) {
+                    pendingBreak = true
+                }
+                if !chars.isEmpty {
+                    chars[chars.count - 1].spaceAfter = true
                 }
                 continue
             }
-            let bounds = page.characterBounds(at: range.location)
-            guard bounds.width > 0, bounds.height > 0, !bounds.isInfinite else { continue }
-            var size = Double(bounds.height) * 0.85
+            let box = selection.bounds(for: page)
+            guard !box.isNull, !box.isInfinite, box.width > 0, box.height > 0 else { continue }
+            var points = 0.0
             var fontName = ""
             var color = 0
-            if let attributed, range.location < attributed.length {
-                if let font = attributed.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont {
+            if let attributed = selection.attributedString, attributed.length > 0 {
+                if let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont {
                     fontName = font.fontName
-                    let points = Double(font.pointSize)
-                    // A size far from the box height means the text was scaled by its matrix; trust the box then.
-                    if points >= Double(bounds.height) * 0.45 && points <= Double(bounds.height) * 2.5 {
-                        size = points
-                    }
+                    points = Double(font.pointSize)
                 }
-                if let foreground = attributed.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor,
+                if let foreground = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor,
                    let rgb = foreground.usingColorSpace(.sRGB) {
                     color = (Int(rgb.redComponent * 255) << 16) | (Int(rgb.greenComponent * 255) << 8) | Int(rgb.blueComponent * 255)
                 }
             }
-            result.append(PdfGlyph(value, Double(bounds.minX), Double(bounds.minY), Double(bounds.maxX), Double(bounds.maxY), size, fontName, color))
-            spaceAfter.append(false)
+            chars.append(RawChar(text: value, box: box, points: points, fontName: fontName, color: color, breakBefore: pendingBreak))
+            pendingBreak = false
         }
+
+        // Runs of characters on one line, in PDFKit's order: a new run after a line break, when the text jumps back
+        // to the left, or when the next character no longer overlaps the run vertically.
+        var runs: [Range<Int>] = []
+        var start = 0
+        var top = -Double.greatestFiniteMagnitude, bottom = Double.greatestFiniteMagnitude
+        for i in chars.indices {
+            let box = chars[i].box
+            if i > start {
+                let previous = chars[i - 1].box
+                let jumpsBack = box.minX < previous.maxX - max(box.height, previous.height)
+                if chars[i].breakBefore || jumpsBack || Double(box.minY) >= top || Double(box.maxY) <= bottom {
+                    runs.append(start..<i)
+                    start = i
+                    top = -Double.greatestFiniteMagnitude
+                    bottom = Double.greatestFiniteMagnitude
+                }
+            }
+            top = max(top, Double(box.maxY))
+            bottom = min(bottom, Double(box.minY))
+        }
+        if start < chars.count {
+            runs.append(start..<chars.count)
+        }
+
+        var result: [PdfGlyph] = []
+        var spaceAfter: [Bool] = []
+        for run in runs {
+            let line = chars[run]
+            let heights = line.map { Double($0.box.height) }
+            let bottoms = line.map { Double($0.box.minY) }
+            let tallest = heights.max()!
+            // Boxes of the font's full height are all alike; ink boxes vary with the letters.
+            let fullHeight = line.count >= 2 && tallest - heights.min()! < 0.03 * tallest && bottoms.max()! - bottoms.min()! < 0.03 * tallest
+            let baseline: Double
+            if fullHeight {
+                baseline = bottoms[0] + 0.2 * tallest
+            } else {
+                // The ink of most letters and digits sits on the baseline; descenders and punctuation don't.
+                let flat = line.filter { char in
+                    char.text.unicodeScalars.allSatisfy { TranslatableDocument.isLetter($0) || CharacterSet.decimalDigits.contains($0) }
+                        && !char.text.contains(where: { "gjpqyQ".contains($0) })
+                }
+                let source = flat.isEmpty ? line[...] : flat[...]
+                let sorted = source.map { Double($0.box.minY) }.sorted()
+                baseline = sorted[sorted.count / 2]
+            }
+            for char in line {
+                // The font size from the attributes, unless the text was scaled by its matrix (size 1 drawn at 10).
+                var size = fullHeight ? tallest * 0.9 : tallest * 1.1
+                if char.points > 0 && char.points >= 0.6 * Double(char.box.height) {
+                    size = char.points
+                }
+                let box = char.box
+                result.append(PdfGlyph(char.text, Double(box.minX), baseline - 0.25 * size, Double(box.maxX), baseline + 0.8 * size,
+                                       size, char.fontName, char.color))
+                spaceAfter.append(char.spaceAfter)
+            }
+        }
+
         // Letters of one word touch: close small gaps that tight character boxes leave, so they don't read as spaces.
         for i in result.indices.dropLast() where !spaceAfter[i] {
             let next = result[i + 1]
@@ -220,8 +279,6 @@ public final class PdfDocumentFile: TranslatableDocument {
     // ---------------- writing ----------------
 
     public override func save(to url: URL, translations: [Int: String], options: DocumentSaveOptions) throws {
-        PdfDocumentFile.pdfKitLock.lock()
-        defer { PdfDocumentFile.pdfKitLock.unlock() }
         let document = try PdfDocumentFile.open(sourceURL)
         try TranslatableDocument.writeAtomically(to: url) { temp in
             guard let context = CGContext(temp as CFURL, mediaBox: nil, nil) else {

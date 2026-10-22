@@ -123,7 +123,6 @@ struct PdfLayoutTests {
     }
 }
 
-@Suite(.serialized)
 struct PdfDocumentTests {
     /// A one-page PDF drawn with CoreText: a title, a three-line paragraph on a light blue box, and a rule.
     private func samplePdf() throws -> URL {
@@ -161,24 +160,7 @@ struct PdfDocumentTests {
     @Test func readsBlocksAndWritesTheTranslationIntoTheSameBoxes() throws {
         let url = try samplePdf()
         let document = try PdfDocumentFile(url: url)
-        #expect(document.segments.map(\.plainText).count == 2)
-        guard document.segments.count == 2 else {
-            Issue.record("segments: \(document.segments.map(\.plainText))")
-            print("TAGGED \(document.segments.map(\.text.text))")
-            // Diagnostics for the CI log: the steps of the initializer, with the document kept alive as it does.
-            if let document = PDFDocument(url: url), let page = document.page(at: 0) {
-                let glyphs = PdfDocumentFile.glyphs(of: page)
-                print("ALIVE \(glyphs.map(\.text).joined())")
-                for glyph in glyphs.prefix(90) {
-                    print("AGLYPH \(glyph.text) \(glyph.x0) \(glyph.y0) \(glyph.x1) \(glyph.y1) \(glyph.fontSize) [\(glyph.fontName)] math=\(PdfLayout.isMathGlyph(glyph)) bold=\(glyph.isBold)")
-                }
-                for block in PdfLayout.analyze(glyphs, pageWidth: 595, pageHeight: 842) {
-                    print("ABLOCK \(block.lines.count) formula=\(block.isFormula) \(block.pieces)")
-                }
-                withExtendedLifetime(document) {}
-            }
-            return
-        }
+        try #require(document.segments.count == 2, "segments: \(document.segments.map(\.plainText))")
         #expect(document.segments[0].plainText == "Control of Small Power Grids")
         #expect(document.segments[0].role == .title)
         #expect(document.segments[1].plainText.hasPrefix("Small power grids can run connected"))
