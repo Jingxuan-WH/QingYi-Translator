@@ -708,6 +708,8 @@ public partial class MainWindow : Window
 
     private void GlossaryButton_Click(object sender, RoutedEventArgs e) => App.OpenGlossary(this);
 
+    private void LiveButton_Click(object sender, RoutedEventArgs e) => App.OpenLiveWindow();
+
     private void TranslateFileButton_Click(object sender, RoutedEventArgs e) => App.OpenFileTranslation(choose: true);
 
     // Dropping a file anywhere on the window translates it (dropped text still goes into the text box).

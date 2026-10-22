@@ -1,0 +1,29 @@
+<Window x:Class="Translator.Views.CaptionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Translator.Views"
+        Title="{v:T 悬浮字幕, En='Floating captions'}"
+        Width="900" SizeToContent="Height" MinWidth="360"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        FontFamily="{StaticResource UiFont}" UseLayoutRounding="True">
+    <!-- Always dark and translucent, whatever the app theme, so it reads well over any video. -->
+    <Border x:Name="Panel" CornerRadius="12" Background="#C8101318" Padding="20,12,20,14" MouseLeftButtonDown="Panel_MouseLeftButtonDown">
+        <Grid>
+            <StackPanel x:Name="Lines" Margin="0,0,40,0">
+                <TextBlock x:Name="PreviousSource" Foreground="#99FFFFFF" TextWrapping="Wrap"/>
+                <TextBlock x:Name="PreviousTranslation" Foreground="#CCFFFFFF" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                <TextBlock x:Name="CurrentSource" Foreground="#B3FFFFFF" TextWrapping="Wrap"/>
+                <TextBlock x:Name="CurrentTranslation" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,0"/>
+            </StackPanel>
+            <StackPanel x:Name="Tools" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-12,0" Opacity="0">
+                <Button Style="{StaticResource IconButton}" Width="28" Height="28" FontSize="11" Foreground="#CCFFFFFF" Content="&#xE711;"
+                        ToolTip="{v:T 关闭悬浮字幕, En='Close captions'}" Click="CloseButton_Click"/>
+                <Button Style="{StaticResource IconButton}" Width="28" Height="28" FontSize="12" Foreground="#CCFFFFFF" Content="&#xE710;"
+                        ToolTip="{v:T 放大字号, En='Larger text'}" Click="LargerButton_Click"/>
+                <Button Style="{StaticResource IconButton}" Width="28" Height="28" FontSize="12" Foreground="#CCFFFFFF" Content="&#xE738;"
+                        ToolTip="{v:T 缩小字号, En='Smaller text'}" Click="SmallerButton_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
