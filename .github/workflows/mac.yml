@@ -22,6 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode
+        run: |
+          # Xcode 26 has the macOS 26 SDK, which live transcription needs for SpeechAnalyzer; without it the app still
+          # builds, with SFSpeechRecognizer only.
+          latest="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1 || true)"
+          if [ -n "$latest" ]; then sudo xcode-select -s "$latest/Contents/Developer"; fi
+          xcodebuild -version
+
       - name: Swift version
         run: swift --version
 

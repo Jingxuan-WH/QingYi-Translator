@@ -164,6 +164,8 @@ public final class AppSettings: Codable {
     /// API keys the Keychain refused to store (it can be locked or damaged). The settings file is readable by this user only.
     public var fallbackApiKeys: [String: String] = [:]
 
+    public var live = LiveSettings()
+
     public init() {}
 
     public var activePreset: ProviderPreset { ProviderCatalog.get(activeProvider) }
@@ -275,6 +277,7 @@ public final class AppSettings: Codable {
         if theme != AppSettings.themeLight && theme != AppSettings.themeDark {
             theme = AppSettings.themeSystem
         }
+        live.normalize()
     }
 
     // ---------------- Codable (every field optional in the file, so old files keep loading) ----------------
@@ -285,6 +288,7 @@ public final class AppSettings: Codable {
         case doubleCopyEnabled, hotkeyEnabled, hotkey, autoTranslate, restoreClipboard, closeToMenuBar
         case launchAtLogin, topmost, menuBarTipShown, accessibilityHintShown, mainWindowFrame
         case autoCheckUpdates, lastUpdateCheck, skippedUpdateVersion, notifiedUpdateVersion, fallbackApiKeys
+        case live
     }
 
     public required init(from decoder: Decoder) throws {
@@ -316,5 +320,6 @@ public final class AppSettings: Codable {
         skippedUpdateVersion = try? c.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         notifiedUpdateVersion = try? c.decodeIfPresent(String.self, forKey: .notifiedUpdateVersion)
         fallbackApiKeys = read(.fallbackApiKeys, fallbackApiKeys)
+        live = read(.live, live)
     }
 }
