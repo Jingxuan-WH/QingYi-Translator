@@ -78,6 +78,8 @@ public partial class MainWindow : Window
         };
         Closing += OnClosing;
         PreviewKeyDown += OnPreviewKeyDown;
+        PreviewDragOver += OnPreviewDragOver;
+        PreviewDrop += OnPreviewDrop;
         Loc.Changed += OnInterfaceLanguageChanged;
 
         UpdateSourceChrome();
@@ -706,6 +708,25 @@ public partial class MainWindow : Window
 
     private void GlossaryButton_Click(object sender, RoutedEventArgs e) => App.OpenGlossary(this);
 
+    private void TranslateFileButton_Click(object sender, RoutedEventArgs e) => App.OpenFileTranslation(choose: true);
+
+    // Dropping a file anywhere on the window translates it (dropped text still goes into the text box).
+    private void OnPreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (FileTranslationWindow.DroppedFile(e) is null)
+            return;
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnPreviewDrop(object sender, DragEventArgs e)
+    {
+        if (FileTranslationWindow.DroppedFile(e) is not { } path)
+            return;
+        e.Handled = true;
+        App.OpenFileTranslation(path);
+    }
+
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => App.OpenSettings();
 
     private void EngineStatus_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => App.OpenSettings();
@@ -721,6 +742,11 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             SetHistoryOpen(!IsHistoryOpen);
+        }
+        else if (e.Key == Key.O && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            App.OpenFileTranslation(choose: true);
         }
         else if (e.Key == Key.Escape && !SourceLangBox.IsDropDownOpen && !TargetLangBox.IsDropDownOpen)
         {
