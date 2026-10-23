@@ -341,8 +341,15 @@ struct PdfDocumentTests {
         // The two paragraphs; the formula and its number aren't sent for translation.
         let source = try #require(PDFDocument(url: url))
         let sourcePage = try #require(source.page(at: 0))
-        let dump = PdfDocumentFile.glyphs(of: sourcePage).filter { (842.0 - 215)...(842 - 185) ~= $0.y0 + 0.25 * $0.fontSize }
-            .map { "\($0.text) x=\(Int($0.x0)) base=\($0.y0 + 0.25 * $0.fontSize) size=\($0.fontSize) \($0.fontName)" }.joined(separator: "\n")
+        var raw: [String] = []
+        for index in 0..<sourcePage.numberOfCharacters {
+            guard let selection = sourcePage.selection(for: NSRange(location: index, length: 1)) else { continue }
+            let box = selection.bounds(for: sourcePage)
+            guard (842.0 - 215)...(842 - 185) ~= Double(box.midY) else { continue }
+            let font = selection.attributedString.flatMap { $0.length > 0 ? $0.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil }
+            raw.append("\(index) \((selection.string ?? "").debugDescription) x=\(box.minX) y=\(box.minY) w=\(box.width) h=\(box.height) font=\(font?.fontName ?? "-") pt=\(font?.pointSize ?? 0)")
+        }
+        let dump = raw.joined(separator: "\n")
         try #require(document.segments.count == 2, "segments: \(document.segments.map(\.text.text))\n\(dump)")
         #expect(!document.segments.contains { $0.plainText.contains("=") })
         let intro = try #require(document.segments.first { $0.plainText.contains("Nernst voltage") })
