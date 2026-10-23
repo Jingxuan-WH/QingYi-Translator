@@ -26,6 +26,10 @@ enum SpeechSetupError: Error {
     /// macOS 26: the language's model is supported but not downloaded yet.
     case needsDownload([Language])
     case unsupported([Language])
+    /// macOS 26: the app couldn't reserve the language's model; the detail comes from macOS.
+    case cannotReserve([Language], String)
+    /// macOS 26: a download finished, but macOS doesn't report the model as installed.
+    case downloadIncomplete([Language], SpeechModelStatus)
 }
 
 /// Picks the recognizer: SpeechAnalyzer / SpeechTranscriber on macOS 26 and later, SFSpeechRecognizer
@@ -47,17 +51,18 @@ enum SpeechEngine {
     static func makeRecognizers(for languages: [Language]) async throws -> [UtteranceRecognizer] {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
+            Log.info("语音识别：SpeechAnalyzer，语言 \(codes(languages))")
             var recognizers: [UtteranceRecognizer] = []
             var missing: [Language] = []
-            var unsupported: [Language] = []
+            var failure: Error?
             for language in languages {
                 do {
-                    recognizers.append(try await AnalyzerSpeechRecognizer.make(language: language))
+                    recognizers.append(try await AnalyzerSpeechRecognizer.make(language: language, keeping: languages))
                 } catch SpeechSetupError.needsDownload(let languages) {
                     missing += languages
                 } catch {
                     Log.error("无法创建 SpeechAnalyzer（\(language.code)）", error)
-                    unsupported.append(language)
+                    failure = failure ?? error
                 }
             }
             if !missing.isEmpty {
@@ -65,12 +70,14 @@ enum SpeechEngine {
                 throw SpeechSetupError.needsDownload(missing)
             }
             if recognizers.isEmpty {
-                throw SpeechSetupError.unsupported(unsupported)
+                throw failure ?? SpeechSetupError.unsupported(languages)
             }
             return recognizers
         }
         #endif
-        guard await LivePermissions.requestSpeechRecognition() else {
+        let allowed = await LivePermissions.requestSpeechRecognition()
+        Log.info("语音识别：SFSpeechRecognizer，权限\(allowed ? "已授权" : "被拒绝")")
+        guard allowed else {
             throw SpeechSetupError.permissionDenied
         }
         var recognizers: [UtteranceRecognizer] = []
@@ -82,23 +89,29 @@ enum SpeechEngine {
                 notOnDevice.append(language)
             }
         }
+        Log.info("离线语音识别：可用 \(codes(recognizers.map(\.language)))，没有离线模型 \(codes(notOnDevice))")
         if recognizers.isEmpty {
             throw SpeechSetupError.notOnDevice(notOnDevice)
         }
         return recognizers
     }
 
-    /// macOS 26: downloads the speech models of `languages` (managed by macOS, shared with other apps).
-    static func downloadModels(for languages: [Language], progress: @escaping (Double) -> Void) async throws {
+    /// macOS 26: downloads the speech models of `languages` (managed by macOS, shared with other apps). `keeping` are
+    /// all the languages about to be used, whose reservations must stay.
+    static func downloadModels(for languages: [Language], keeping: [Language], progress: @escaping (Double) -> Void) async throws {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             for (index, language) in languages.enumerated() {
-                try await AnalyzerSpeechRecognizer.download(language: language) { fraction in
+                try await AnalyzerSpeechRecognizer.download(language: language, keeping: keeping) { fraction in
                     progress((Double(index) + fraction) / Double(languages.count))
                 }
             }
         }
         #endif
+    }
+
+    static func codes(_ languages: [Language]) -> String {
+        languages.isEmpty ? "-" : languages.map(\.code).joined(separator: "+")
     }
 }
 
@@ -260,10 +273,22 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         return locale
     }
 
-    static func make(language: Language) async throws -> AnalyzerSpeechRecognizer {
-        let module = transcriber(for: try await locale(for: language))
-        if try await AssetInventory.assetInstallationRequest(supporting: [module]) != nil {
+    /// - Parameter keeping: All the languages of this session, whose model reservations must stay.
+    static func make(language: Language, keeping: [Language]) async throws -> AnalyzerSpeechRecognizer {
+        let speechLocale = try await locale(for: language)
+        let module = transcriber(for: speechLocale)
+        // Whether the model is installed only shows once the locale is reserved. assetInstallationRequest(supporting:)
+        // can't tell: it returns a request even for an installed model.
+        try await reserve(speechLocale, for: language, keeping: keeping)
+        let status = await modelStatus(module)
+        Log.info("语音模型 \(name(speechLocale))：\(status.rawValue)")
+        switch SpeechModelPlan.action(for: status) {
+        case .ready:
+            break
+        case .download:
             throw SpeechSetupError.needsDownload([language])
+        case .unsupported:
+            throw SpeechSetupError.unsupported([language])
         }
         let analyzer = SpeechAnalyzer(modules: [module], options: nil)
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
@@ -272,18 +297,74 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         try await analyzer.prepareToAnalyze(in: format)
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         try await analyzer.start(inputSequence: stream)
+        Log.info("SpeechAnalyzer 已启动：\(name(speechLocale))，\(format)")
         return AnalyzerSpeechRecognizer(language: language, transcriber: module, analyzer: analyzer, format: format, input: continuation)
     }
 
-    static func download(language: Language, progress: @escaping (Double) -> Void) async throws {
-        let module = transcriber(for: try await locale(for: language))
-        guard let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) else { return }
-        let observation = request.progress.observe(\.fractionCompleted) { value, _ in
-            progress(value.fractionCompleted)
+    static func download(language: Language, keeping: [Language], progress: @escaping (Double) -> Void) async throws {
+        let speechLocale = try await locale(for: language)
+        let module = transcriber(for: speechLocale)
+        try await reserve(speechLocale, for: language, keeping: keeping)
+        var status = await modelStatus(module)
+        Log.info("下载语音模型 \(name(speechLocale))：开始前 \(status.rawValue)")
+        if status != .installed {
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+                let observation = request.progress.observe(\.fractionCompleted) { value, _ in
+                    progress(value.fractionCompleted)
+                }
+                defer { observation.invalidate() }
+                try await request.downloadAndInstall()
+            }
+            status = await modelStatus(module)
         }
-        defer { observation.invalidate() }
-        try await request.downloadAndInstall()
+        Log.info("下载语音模型 \(name(speechLocale))：结束后 \(status.rawValue)")
+        guard status == .installed else {
+            throw SpeechSetupError.downloadIncomplete([language], status)
+        }
+        progress(1)
     }
+
+    /// Reserves the locale's model for this app: macOS reports a model as installed, and keeps it, for the locales an
+    /// app has reserved. When the app already holds as many reservations as allowed, ones it doesn't need now go first.
+    private static func reserve(_ speechLocale: Locale, for language: Language, keeping languages: [Language]) async throws {
+        var needed: [String] = []
+        for other in languages {
+            if let otherLocale = try? await locale(for: other) {
+                needed.append(key(otherLocale))
+            }
+        }
+        let reserved = await AssetInventory.reservedLocales
+        let maximum = AssetInventory.maximumReservedLocales
+        let release = SpeechModelPlan.reservationsToRelease(reserved: reserved.map { key($0) }, needed: needed, maximum: maximum)
+        for old in reserved where release.contains(key(old)) {
+            let released = await AssetInventory.release(reservedLocale: old)
+            Log.info("释放不再使用的语音模型预留 \(name(old))：\(released)")
+        }
+        let summary = "已预留 \(reserved.isEmpty ? "-" : reserved.map { name($0) }.joined(separator: ", "))，上限 \(maximum)"
+        do {
+            let added = try await AssetInventory.reserve(locale: speechLocale)
+            Log.info("预留语音模型 \(name(speechLocale))：\(added ? "新预留" : "之前已预留")（\(summary)）")
+        } catch {
+            Log.error("无法预留语音模型 \(name(speechLocale))（\(summary)）", error)
+            throw SpeechSetupError.cannotReserve([language], error.localizedDescription)
+        }
+    }
+
+    private static func modelStatus(_ module: SpeechTranscriber) async -> SpeechModelStatus {
+        switch await AssetInventory.status(forModules: [module]) {
+        case .installed: return .installed
+        case .downloading: return .downloading
+        case .supported: return .supported
+        case .unsupported: return .unsupported
+        @unknown default: return .unsupported
+        }
+    }
+
+    private static func key(_ locale: Locale) -> String {
+        SpeechModelPlan.key(languageCode: locale.language.languageCode?.identifier ?? locale.identifier, region: locale.region?.identifier)
+    }
+
+    private static func name(_ locale: Locale) -> String { locale.identifier(.bcp47) }
 
     func begin(_ utterance: Int, at sample: Int64) {
         let start = Double(sample) / 16000
