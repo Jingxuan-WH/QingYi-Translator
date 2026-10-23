@@ -339,7 +339,11 @@ struct PdfDocumentTests {
         let url = try formulaPdf()
         let document = try PdfDocumentFile(url: url)
         // The two paragraphs; the formula and its number aren't sent for translation.
-        try #require(document.segments.count == 2, "segments: \(document.segments.map(\.text.text))")
+        let source = try #require(PDFDocument(url: url))
+        let sourcePage = try #require(source.page(at: 0))
+        let dump = PdfDocumentFile.glyphs(of: sourcePage).filter { (842.0 - 215)...(842 - 185) ~= $0.y0 + 0.25 * $0.fontSize }
+            .map { "\($0.text) x=\(Int($0.x0)) base=\($0.y0 + 0.25 * $0.fontSize) size=\($0.fontSize) \($0.fontName)" }.joined(separator: "\n")
+        try #require(document.segments.count == 2, "segments: \(document.segments.map(\.text.text))\n\(dump)")
         #expect(!document.segments.contains { $0.plainText.contains("=") })
         let intro = try #require(document.segments.first { $0.plainText.contains("Nernst voltage") })
         let paragraph = try #require(document.segments.first { $0.plainText.contains("grows with the current") })
