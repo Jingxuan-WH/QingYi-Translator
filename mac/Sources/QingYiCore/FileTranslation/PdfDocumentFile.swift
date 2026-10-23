@@ -113,7 +113,7 @@ public final class PdfDocumentFile: TranslatableDocument {
     /// Text, box and font come from the same one-character selection: `page.string` can contain characters that
     /// `characterBounds(at:)` doesn't count, which would give every following character its neighbour's box.
     /// PDFKit reports either the font's full height or just the ink of each letter, so the boxes are rebuilt from
-    /// each line's baseline and font size, as on Windows: [baseline − 0.25 × size, baseline + 0.8 × size].
+    /// each line's baseline (a sub/superscript's own) and font size, as on Windows: [baseline − 0.25 × size, baseline + 0.8 × size].
     static func glyphs(of page: PDFPage) -> [PdfGlyph] {
         var chars: [RawChar] = []
         var pendingBreak = false
@@ -173,32 +173,33 @@ public final class PdfDocumentFile: TranslatableDocument {
 
         var result: [PdfGlyph] = []
         var spaceAfter: [Bool] = []
+        // The ink of most letters and digits sits on the baseline; descenders and punctuation don't.
+        func flat(_ char: RawChar) -> Bool {
+            char.text.unicodeScalars.allSatisfy { TranslatableDocument.isLetter($0) || CharacterSet.decimalDigits.contains($0) }
+                && !char.text.contains(where: { "gjpqyQβγζημξρςφχψ".contains($0) })
+        }
         for run in runs {
-            let line = chars[run]
+            let line = Array(chars[run])
             let heights = line.map { Double($0.box.height) }
-            let bottoms = line.map { Double($0.box.minY) }
             let tallest = heights.max()!
+            // The font size from the attributes, unless the text was scaled by its matrix (size 1 drawn at 10): 0 then.
+            let sizes = line.map { $0.points > 0 && $0.points >= 0.6 * Double($0.box.height) ? $0.points : 0 }
+            let mainSize = sizes.max()!
+            // Full-size characters share the line's baseline; sub/superscripts keep their own.
+            let isMain = sizes.map { mainSize == 0 || $0 >= 0.85 * mainSize }
+            let main = line.indices.filter { isMain[$0] }
+            let mainHeights = main.map { heights[$0] }
+            let mainBottoms = main.map { Double(line[$0].box.minY) }
             // Boxes of the font's full height are all alike; ink boxes vary with the letters.
-            let fullHeight = line.count >= 2 && tallest - heights.min()! < 0.03 * tallest && bottoms.max()! - bottoms.min()! < 0.03 * tallest
-            let baseline: Double
-            if fullHeight {
-                baseline = bottoms[0] + 0.2 * tallest
-            } else {
-                // The ink of most letters and digits sits on the baseline; descenders and punctuation don't.
-                let flat = line.filter { char in
-                    char.text.unicodeScalars.allSatisfy { TranslatableDocument.isLetter($0) || CharacterSet.decimalDigits.contains($0) }
-                        && !char.text.contains(where: { "gjpqyQ".contains($0) })
-                }
-                let source = flat.isEmpty ? line[...] : flat[...]
-                let sorted = source.map { Double($0.box.minY) }.sorted()
-                baseline = sorted[sorted.count / 2]
-            }
-            for char in line {
-                // The font size from the attributes, unless the text was scaled by its matrix (size 1 drawn at 10).
-                var size = fullHeight ? tallest * 0.9 : tallest * 1.1
-                if char.points > 0 && char.points >= 0.6 * Double(char.box.height) {
-                    size = char.points
-                }
+            let fullHeight = main.count >= 2 && mainHeights.max()! - mainHeights.min()! < 0.03 * mainHeights.max()!
+                && mainBottoms.max()! - mainBottoms.min()! < 0.03 * mainHeights.max()!
+            let flatMain = main.filter { flat(line[$0]) }
+            let bottoms = (flatMain.isEmpty ? main : flatMain).map { Double(line[$0].box.minY) }.sorted()
+            let lineBaseline = bottoms[bottoms.count / 2]
+            for (i, char) in line.enumerated() {
+                let size = sizes[i] > 0 ? sizes[i] : fullHeight ? heights[i] * 0.9 : isMain[i] ? tallest * 1.1 : heights[i] * 1.5
+                let bottom = Double(char.box.minY)
+                let baseline = fullHeight ? bottom + 0.2 * heights[i] : isMain[i] ? lineBaseline : bottom + (flat(char) ? 0 : 0.2 * size)
                 let box = char.box
                 result.append(PdfGlyph(char.text, Double(box.minX), baseline - 0.25 * size, Double(box.maxX), baseline + 0.8 * size,
                                        size, char.fontName, char.color))
@@ -311,14 +312,13 @@ public final class PdfDocumentFile: TranslatableDocument {
     }
 
     /// Covers the original lines and sets the translation into the paragraph's box, shrinking the font until it fits.
+    /// Bold and italic text keep their style, Latin text in a CJK translation gets a Latin font, and objects (inline
+    /// formulas, sub/superscripts) are drawn character by character as they were.
     private static func draw(_ block: PdfBlock, translation: [InlinePiece], target: Language, in context: CGContext) {
-        // Objects (inline formulas) are drawn with their own text.
-        var formulas: [Int: String] = [:]
-        for piece in block.pieces where piece.isAtom {
-            formulas[piece.atom] = piece.text
+        let hasContent = translation.contains {
+            $0.isAtom ? block.atoms[$0.atom] != nil : !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        let text = translation.map { $0.isAtom ? formulas[$0.atom] ?? "" : $0.text }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard hasContent else { return }
 
         // Cover the original lines (slightly larger than the characters, for accents and anti-aliasing).
         context.setFillColor(cgColor(block.background))
@@ -333,7 +333,7 @@ public final class PdfDocumentFile: TranslatableDocument {
         let minimum = max(block.fontSize * 0.5, min(block.fontSize, 4))
         var size = block.fontSize
         while true {
-            let string = attributedText(text, block: block, target: target, size: size, pitch: pitchRatio * size)
+            let string = attributedText(translation, block: block, target: target, size: size, pitch: pitchRatio * size)
             let framesetter = CTFramesetterCreateWithAttributedString(string)
             let fit = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRange(location: 0, length: 0), nil,
                                                                    CGSize(width: width, height: .greatestFiniteMagnitude), nil)
@@ -342,11 +342,12 @@ public final class PdfDocumentFile: TranslatableDocument {
             if Double(fit.height) <= allowed || size * 0.95 < minimum {
                 let frameHeight = max(Double(fit.height), allowed) + 1
                 let top = block.y1 + 0.15 * size
-                let path = CGPath(rect: CGRect(x: block.x0, y: top - frameHeight, width: width, height: frameHeight), transform: nil)
-                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+                let rect = CGRect(x: block.x0, y: top - frameHeight, width: width, height: frameHeight)
+                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), CGPath(rect: rect, transform: nil), nil)
                 context.saveGState()
                 context.textMatrix = .identity
                 CTFrameDraw(frame, context)
+                drawAtoms(in: frame, rect: rect, block: block, scale: size / block.fontSize, context: context)
                 context.restoreGState()
                 return
             }
@@ -354,20 +355,131 @@ public final class PdfDocumentFile: TranslatableDocument {
         }
     }
 
-    private static func attributedText(_ text: String, block: PdfBlock, target: Language, size: Double, pitch: Double) -> CFAttributedString {
+    /// Marks the placeholder of an object in the attributed text; the value is the object number.
+    private static let atomKey = NSAttributedString.Key("QingYiAtom")
+
+    /// The size of an object's placeholder, for CoreText's line layout.
+    private final class AtomBox {
+        let width: CGFloat
+        let ascent: CGFloat
+        let descent: CGFloat
+
+        init(width: CGFloat, ascent: CGFloat, descent: CGFloat) {
+            self.width = width
+            self.ascent = ascent
+            self.descent = descent
+        }
+    }
+
+    private static func placeholder(width: Double, size: Double) -> CTRunDelegate? {
+        var callbacks = CTRunDelegateCallbacks(version: kCTRunDelegateVersion1, dealloc: { pointer in
+            Unmanaged<AtomBox>.fromOpaque(pointer).release()
+        }, getAscent: { pointer in
+            Unmanaged<AtomBox>.fromOpaque(pointer).takeUnretainedValue().ascent
+        }, getDescent: { pointer in
+            Unmanaged<AtomBox>.fromOpaque(pointer).takeUnretainedValue().descent
+        }, getWidth: { pointer in
+            Unmanaged<AtomBox>.fromOpaque(pointer).takeUnretainedValue().width
+        })
+        let box = AtomBox(width: CGFloat(width), ascent: CGFloat(0.8 * size), descent: CGFloat(0.25 * size))
+        return CTRunDelegateCreate(&callbacks, Unmanaged.passRetained(box).toOpaque())
+    }
+
+    private static func attributedText(_ translation: [InlinePiece], block: PdfBlock, target: Language, size: Double, pitch: Double) -> CFAttributedString {
         let style = NSMutableParagraphStyle()
         style.alignment = block.centered ? .center : block.justified ? .justified : .left
         style.firstLineHeadIndent = block.firstLineIndent
         style.minimumLineHeight = pitch
         style.maximumLineHeight = pitch
         style.lineBreakMode = .byWordWrapping
-        let attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): font(for: target, text: text, serif: block.serif, bold: block.bold,
-                                                                         italic: block.italic, size: size),
+        let fontKey = NSAttributedString.Key(kCTFontAttributeName as String)
+        let common: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): cgColor(block.color),
             NSAttributedString.Key(kCTParagraphStyleAttributeName as String): style,
         ]
-        return NSAttributedString(string: text, attributes: attributes) as CFAttributedString
+        let all = translation.filter { !$0.isAtom }.map(\.text).joined()
+        let main = font(for: target, text: all, serif: block.serif, bold: block.bold, italic: block.italic, size: size)
+        let cjkTarget = ["zh-Hans", "zh-Hant", "ja", "ko"].contains(target.code)
+        let formulas = Dictionary(block.pieces.filter(\.isAtom).map { ($0.atom, $0.text) }, uniquingKeysWith: { first, _ in first })
+        let result = NSMutableAttributedString()
+        for piece in translation {
+            if piece.isAtom, let atom = block.atoms[piece.atom] {
+                var attributes = common
+                attributes[fontKey] = main
+                attributes[atomKey] = piece.atom
+                if let delegate = placeholder(width: atom.width * size / block.fontSize, size: size) {
+                    attributes[NSAttributedString.Key(kCTRunDelegateAttributeName as String)] = delegate
+                }
+                result.append(NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+                continue
+            }
+            let text = piece.isAtom ? formulas[piece.atom] ?? "" : piece.text
+            let bold = piece.style & 1 != 0 || (piece.isAtom && block.bold)
+            let italic = piece.style & 2 != 0 || (piece.isAtom && block.italic)
+            let targetFont = font(for: target, text: text, serif: block.serif, bold: bold, italic: italic, size: size)
+            let latinFont = font(for: Languages.english, text: "", serif: block.serif, bold: bold, italic: italic, size: size)
+            // Runs of Latin and other characters: in a CJK translation, Latin letters, digits and symbols get a Latin font
+            // (CJK fonts draw them as stiff half-width forms); CoreText falls back for characters a font lacks.
+            var run = ""
+            var runIsLatin = false
+            func flush() {
+                guard !run.isEmpty else { return }
+                var attributes = common
+                attributes[fontKey] = runIsLatin ? latinFont : targetFont
+                result.append(NSAttributedString(string: run, attributes: attributes))
+                run = ""
+            }
+            for character in text {
+                let latin = cjkTarget && isLatin(character) && !(character.isWhitespace && !runIsLatin)
+                if latin != runIsLatin {
+                    flush()
+                    runIsLatin = latin
+                }
+                run.append(character)
+            }
+            flush()
+        }
+        return result as CFAttributedString
+    }
+
+    /// Latin, Greek and Cyrillic letters, digits and symbols, apart from the punctuation CJK text sets at its own width.
+    private static func isLatin(_ character: Character) -> Bool {
+        guard let value = character.unicodeScalars.first?.value else { return false }
+        if [0x2014, 0x2026, 0x2018, 0x2019, 0x201C, 0x201D, 0xB7].contains(value) {
+            return false
+        }
+        return value < 0x0530 || (0x1E00...0x1FFF).contains(value) || (0x2000...0x2BFF).contains(value)
+    }
+
+    /// Draws each object's characters where its placeholder ended up, at their original offsets and sizes (scaled with the paragraph).
+    private static func drawAtoms(in frame: CTFrame, rect: CGRect, block: PdfBlock, scale: Double, context: CGContext) {
+        let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        for (index, line) in lines.enumerated() {
+            for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                guard let number = attributes[atomKey.rawValue] as? Int, let atom = block.atoms[number] else { continue }
+                let range = CTRunGetStringRange(run)
+                for k in 0..<range.length {
+                    let offset = CTLineGetOffsetForStringIndex(line, range.location + k, nil)
+                    let x = Double(rect.minX + origins[index].x + offset)
+                    let baseline = Double(rect.minY + origins[index].y)
+                    for glyph in atom.glyphs where !glyph.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                        let glyphFont = font(for: Languages.english, text: "", serif: block.serif || PdfLayout.isSerifFont(glyph.fontName),
+                                             bold: PdfLayout.isBoldFont(glyph.fontName), italic: PdfLayout.isItalicFont(glyph.fontName),
+                                             size: max(glyph.fontSize * scale, 1))
+                        let attributes: [NSAttributedString.Key: Any] = [
+                            NSAttributedString.Key(kCTFontAttributeName as String): glyphFont,
+                            NSAttributedString.Key(kCTForegroundColorAttributeName as String): cgColor(block.color),
+                        ]
+                        let text = CTLineCreateWithAttributedString(NSAttributedString(string: glyph.text, attributes: attributes) as CFAttributedString)
+                        context.textPosition = CGPoint(x: x + glyph.dx * scale, y: baseline + glyph.dy * scale)
+                        CTLineDraw(text, context)
+                    }
+                }
+            }
+        }
     }
 
     /// System fonts for the target language: 宋体/苹方 for Chinese, Hiragino for Japanese, Apple's Korean fonts,

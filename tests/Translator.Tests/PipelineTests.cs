@@ -58,6 +58,17 @@ public class SegmentBatcherTests
 public class DomainAnalyzerTests
 {
     [Fact]
+    public void SampleMarksFormatsGluedToALetter()
+    {
+        var formula = new DocumentSegment(0, TaggedText.Build([InlinePiece.Of("V", 0), InlinePiece.Of("cell", 1), InlinePiece.Of(" = E", 0), InlinePiece.Of("Nernst", 1)]));
+        var chinese = new DocumentSegment(1, TaggedText.Build([InlinePiece.Of("电堆性能的", 0), InlinePiece.Of("退化", 1), InlinePiece.Of("很慢。", 0)]));
+        string sample = DomainAnalyzer.BuildSample([formula, chinese], 6000);
+        Assert.Contains("V_cell = E_Nernst", sample);
+        Assert.Contains("电堆性能的退化很慢。", sample);
+        Assert.Contains("V_cell", DomainAnalyzer.BuildSystemPrompt(Languages.SimplifiedChinese, Languages.SimplifiedChinese));
+    }
+
+    [Fact]
     public void ParsesFencedJsonWithChatter()
     {
         var profile = DomainAnalyzer.Parse("""

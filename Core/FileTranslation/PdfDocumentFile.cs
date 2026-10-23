@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
@@ -249,13 +250,56 @@ public sealed class PdfDocumentFile : TranslatableDocument
         }
     }
 
+    /// <summary>How one style of a translated paragraph is drawn: a font face (with simulated italics when it has none), or an object.</summary>
+    private sealed record RunStyle(string Face, bool SimulateItalic, int Atom = -1);
+
+    /// <summary>Stands for an object (inline formula, sub/superscript) in the text being fitted.</summary>
+    private const char Placeholder = '\uFFFC';
+
     private void DrawBlock(XGraphics gfx, PdfBlock block, TaggedText tagged, string translation, Language target, Func<double, double, XPoint> map,
         ISet<PdfLine> cleared)
     {
-        // Objects (inline formulas) are drawn with their own text.
+        // The translation in runs of one font each: every character gets a font that has it, bold and italic text keep
+        // their style, and objects become placeholders drawn character by character as they were.
+        var styles = new List<RunStyle>();
+        int StyleOf(RunStyle style)
+        {
+            int index = styles.IndexOf(style);
+            if (index < 0)
+            {
+                styles.Add(style);
+                index = styles.Count - 1;
+            }
+            return index;
+        }
         var formulas = block.Pieces.Where(p => p.IsAtom).ToDictionary(p => p.Atom, p => p.Text);
-        string text = string.Concat(tagged.Parse(translation).Select(p => p.IsAtom ? formulas.GetValueOrDefault(p.Atom, "") : p.Text)).Trim();
-        if (text.Length == 0)
+        var runs = new List<TextRun>();
+        foreach (var piece in tagged.Parse(translation))
+        {
+            if (piece.IsAtom && block.Atoms.ContainsKey(piece.Atom))
+            {
+                runs.Add(new TextRun(Placeholder.ToString(), StyleOf(new RunStyle("", false, piece.Atom))));
+                continue;
+            }
+            string text = piece.IsAtom ? formulas.GetValueOrDefault(piece.Atom, "") : piece.Text;
+            bool bold = (piece.Style & 1) != 0 || piece.IsAtom && block.Bold, italic = (piece.Style & 2) != 0 || piece.IsAtom && block.Italic;
+            string? face = null;
+            var chunk = new System.Text.StringBuilder();
+            foreach (var rune in text.EnumerateRunes())
+            {
+                string next = Rune.IsWhiteSpace(rune) && face is not null ? face : PdfFonts.FaceForChar(target, rune.Value, block.Serif, bold, italic);
+                if (face is not null && next != face)
+                {
+                    runs.Add(new TextRun(chunk.ToString(), StyleOf(Style(face, italic))));
+                    chunk.Clear();
+                }
+                face = next;
+                chunk.Append(rune.ToString());
+            }
+            if (face is not null)
+                runs.Add(new TextRun(chunk.ToString(), StyleOf(Style(face, italic))));
+        }
+        if (runs.All(run => string.IsNullOrWhiteSpace(run.Text)))
             return;
 
         // Cover original lines that are still there (slightly larger than the characters, for accents and anti-aliasing).
@@ -267,29 +311,76 @@ public sealed class PdfDocumentFile : TranslatableDocument
             gfx.DrawRectangle(cover, topLeft.X, topLeft.Y, line.X1 - line.X0 + 1.2, line.Y1 - line.Y0 + 2 * pad);
         }
 
-        string face = PdfFonts.FaceFor(target, text, block.Serif, block.Bold);
-        var style = block.Italic ? XFontStyleEx.Italic : XFontStyleEx.Regular;
         var options = new XPdfFontOptions(PdfFontEncoding.Unicode);
-        var probe = new XFont(face, 10, style, options);
-        double width = block.X1 - block.X0, height = block.Y1 - block.Y0;
-        var fitted = PdfTextFitter.Fit(text, width, height, block.FontSize, block.LinePitch / block.FontSize,
-            piece => gfx.MeasureString(piece, probe).Width / 10, block.Justified, firstIndent: block.FirstLineIndent);
+        var fonts = new Dictionary<(int, double), XFont>();
+        XFont FontOf(int style, double size)
+        {
+            if (!fonts.TryGetValue((style, size), out var font))
+                fonts[(style, size)] = font = new XFont(styles[style].Face, size, styles[style].SimulateItalic ? XFontStyleEx.Italic : XFontStyleEx.Regular, options);
+            return font;
+        }
+        // The style with the most text sets the spaces next to objects and the height of the first line.
+        int main = runs.Where(run => styles[run.Style].Atom < 0).GroupBy(run => run.Style)
+            .OrderByDescending(group => group.Sum(run => run.Text.Length)).Select(group => group.Key).DefaultIfEmpty(-1).First();
+        if (main < 0)
+            main = StyleOf(Style(PdfFonts.FaceFor(target, "", block.Serif, block.Bold), block.Italic));
+        double Measure(string piece, int style)
+        {
+            var info = styles[style];
+            if (info.Atom < 0)
+                return gfx.MeasureString(piece, FontOf(style, 10)).Width / 10;
+            string rest = piece.Replace(Placeholder.ToString(), "");
+            return piece.Count(c => c == Placeholder) * block.Atoms[info.Atom].Width / block.FontSize
+                + (rest.Length > 0 ? gfx.MeasureString(rest, FontOf(main, 10)).Width / 10 : 0);
+        }
 
-        var font = new XFont(face, fitted.FontSize, style, options);
+        double width = block.X1 - block.X0, height = block.Y1 - block.Y0;
+        var fitted = PdfTextFitter.Fit(runs, width, height, block.FontSize, block.LinePitch / block.FontSize, Measure, block.Justified,
+            firstIndent: block.FirstLineIndent);
+        double scale = fitted.FontSize / block.FontSize;
         var brush = new XSolidBrush(ToXColor(block.Color));
         // CJK glyphs reach higher than Latin capitals; put the first line's top where the original's was.
-        bool cjk = text.Any(c => c is >= '⺀' and <= '鿿' or >= '가' and <= '힯');
-        double rise = cjk ? 0.86 : Math.Clamp(font.Metrics.CapHeight / (double)font.Metrics.UnitsPerEm, 0.6, 0.8);
+        bool cjk = styles[main].Face.Split('-')[0] is "zh" or "zht" or "ja" or "ko";
+        var mainFont = FontOf(main, fitted.FontSize);
+        double rise = cjk ? 0.86 : Math.Clamp(mainFont.Metrics.CapHeight / (double)mainFont.Metrics.UnitsPerEm, 0.6, 0.8);
         double baseline = block.Y1 - rise * fitted.FontSize;
         foreach (var line in fitted.Lines)
         {
             double x = block.X0 + (block.Centered ? (width - line.Width) / 2 : 0);
-            foreach (var (piece, offset) in line.Pieces)
+            foreach (var (piece, style, offset) in line.Pieces)
             {
+                if (styles[style].Atom is var atom and >= 0)
+                {
+                    var drawn = block.Atoms[atom];
+                    for (int k = 0; k < piece.Count(c => c == Placeholder); k++)
+                        DrawAtom(gfx, drawn, x + offset + k * drawn.Width * scale, baseline, scale, block, target, map, brush);
+                    continue;
+                }
                 var point = map(x + offset, baseline);
-                gfx.DrawString(piece, font, brush, point.X, point.Y, XStringFormats.BaseLineLeft);
+                gfx.DrawString(piece, FontOf(style, fitted.FontSize), brush, point.X, point.Y, XStringFormats.BaseLineLeft);
             }
             baseline -= fitted.LinePitch;
+        }
+    }
+
+    private static RunStyle Style(string face, bool italic) => new(face, italic && face.StartsWith("latin", StringComparison.Ordinal) && !face.EndsWith("-italic", StringComparison.Ordinal));
+
+    /// <summary>An object as it was drawn: each character at its offset and size (scaled with the paragraph), in a font that has it.</summary>
+    private static void DrawAtom(XGraphics gfx, PdfAtom atom, double x, double baseline, double scale, PdfBlock block, Language target,
+        Func<double, double, XPoint> map, XBrush brush)
+    {
+        var options = new XPdfFontOptions(PdfFontEncoding.Unicode);
+        foreach (var glyph in atom.Glyphs)
+        {
+            if (string.IsNullOrWhiteSpace(glyph.Text))
+                continue;
+            bool italic = PdfLayout.IsItalicFont(glyph.FontName);
+            string face = PdfFonts.FaceForChar(target, char.ConvertToUtf32(glyph.Text, 0), block.Serif || PdfLayout.IsSerifFont(glyph.FontName),
+                PdfLayout.IsBoldFont(glyph.FontName), italic);
+            var style = Style(face, italic).SimulateItalic ? XFontStyleEx.Italic : XFontStyleEx.Regular;
+            var font = new XFont(face, Math.Max(glyph.FontSize * scale, 1), style, options);
+            var point = map(x + glyph.Dx * scale, baseline + glyph.Dy * scale);
+            gfx.DrawString(glyph.Text, font, brush, point.X, point.Y, XStringFormats.BaseLineLeft);
         }
     }
 

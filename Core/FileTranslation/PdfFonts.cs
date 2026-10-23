@@ -6,13 +6,15 @@ namespace Translator.Core.FileTranslation;
 
 /// <summary>
 /// Fonts for the translated PDF, taken from the Windows font folder: 宋体 / 微软雅黑 for Chinese, Yu Mincho /
-/// Yu Gothic for Japanese, Malgun Gothic for Korean, Times New Roman / Arial for most other languages.
-/// PDFsharp embeds only the characters used.
+/// Yu Gothic for Japanese, Malgun Gothic for Korean, Times New Roman / Arial for Latin text and most other
+/// languages, Cambria Math / Segoe UI Symbol for symbols the others lack. Each character is drawn with a font
+/// that has it (see <see cref="FaceForChar"/>). PDFsharp embeds only the characters used.
 /// </summary>
 public sealed class PdfFonts : IFontResolver
 {
     private static readonly object Gate = new();
     private static readonly Dictionary<string, byte[]?> Cache = [];
+    private static readonly Dictionary<string, (int Start, int End)[]?> Coverage = [];
     private static PdfFonts? _installed;
 
     /// <summary>Candidate font files per face, the first one found wins; ",1" picks the second font of a .ttc collection.</summary>
@@ -38,6 +40,12 @@ public sealed class PdfFonts : IFontResolver
         ["latin-serif-bold"] = ["timesbd.ttf", "georgiab.ttf", "arialbd.ttf"],
         ["latin-sans"] = ["arial.ttf", "segoeui.ttf", "calibri.ttf"],
         ["latin-sans-bold"] = ["arialbd.ttf", "segoeuib.ttf", "calibrib.ttf"],
+        ["latin-serif-italic"] = ["timesi.ttf", "georgiai.ttf"],
+        ["latin-serif-bold-italic"] = ["timesbi.ttf", "georgiaz.ttf"],
+        ["latin-sans-italic"] = ["ariali.ttf", "segoeuii.ttf"],
+        ["latin-sans-bold-italic"] = ["arialbi.ttf", "segoeuiz.ttf"],
+        ["math"] = ["cambria.ttc,1", "seguisym.ttf"],
+        ["symbol"] = ["seguisym.ttf", "arialuni.ttf"],
         ["th-sans"] = ["LeelawUI.ttf", "tahoma.ttf"],
         ["th-sans-bold"] = ["LeelaUIb.ttf", "tahomabd.ttf"],
         ["hi-sans"] = ["Nirmala.ttc", "Nirmala.ttf", "mangal.ttf"],
@@ -89,6 +97,154 @@ public sealed class PdfFonts : IFontResolver
         bool hasSerif = script is "zh" or "zht" or "ja" or "ko" or "latin";
         string face = $"{script}-{(serif && hasSerif ? "serif" : "sans")}{(bold ? "-bold" : "")}";
         return Resolve(face) is not null ? face : Resolve($"{script}-sans") is not null ? $"{script}-sans" : "latin-sans";
+    }
+
+    private static string ScriptOf(Language target) => target.Code switch
+    {
+        "zh-Hans" => "zh",
+        "zh-Hant" => "zht",
+        "ja" => "ja",
+        "ko" => "ko",
+        "th" => "th",
+        "hi" => "hi",
+        "ar" => "ar",
+        _ => "latin",
+    };
+
+    /// <summary>Faces tried after the preferred ones, so that some font has every character.</summary>
+    private static readonly string[] Fallbacks = ["latin-serif", "latin-sans", "math", "symbol", "zh-sans", "ja-sans", "ko-sans", "hi-sans", "th-sans", "ar-sans"];
+
+    /// <summary>
+    /// The face for one character of translated text: the target language's font for its own script, a Latin font for
+    /// Latin letters, digits and symbols (CJK fonts draw them as stiff half-width forms), and otherwise the first font
+    /// that has the character, so none is ever dropped. Italic is only used for Latin text.
+    /// </summary>
+    public static string FaceForChar(Language target, int codepoint, bool serif, bool bold, bool italic)
+    {
+        string script = ScriptOf(target);
+        bool cjkTarget = script is "zh" or "zht" or "ja" or "ko";
+        string preferred = codepoint switch
+        {
+            >= 0xAC00 and <= 0xD7AF or >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F => cjkTarget ? script : "ko",
+            >= 0x3040 and <= 0x30FF or >= 0x31F0 and <= 0x31FF => cjkTarget ? script : "ja",
+            >= 0x2E80 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF or >= 0xFE30 and <= 0xFE4F or >= 0xFF00 and <= 0xFFEF or >= 0x20000 and <= 0x3FFFF
+                => cjkTarget ? script : "zh",
+            // Dashes, ellipses, quotes and the middle dot take the width of the text around them in CJK writing.
+            0x2014 or 0x2026 or >= 0x2018 and <= 0x201D or 0xB7 when cjkTarget => script,
+            >= 0x0E00 and <= 0x0E7F => "th",
+            >= 0x0900 and <= 0x097F => "hi",
+            >= 0x0600 and <= 0x06FF or >= 0x0750 and <= 0x077F or >= 0xFB50 and <= 0xFDFF or >= 0xFE70 and <= 0xFEFF => "ar",
+            _ => "latin",
+        };
+        var candidates = Candidates(preferred, serif, bold, italic);
+        foreach (string face in candidates.Concat(Fallbacks))
+        {
+            if (Resolve(face) is not null && Covers(face, codepoint))
+                return face;
+        }
+        return candidates.FirstOrDefault(face => Resolve(face) is not null) ?? FaceFor(target, "", serif, bold);
+    }
+
+    private static List<string> Candidates(string script, bool serif, bool bold, bool italic)
+    {
+        bool hasSerif = script is "zh" or "zht" or "ja" or "ko" or "latin";
+        string kind = serif && hasSerif ? "serif" : "sans";
+        var faces = new List<string>();
+        if (script == "latin" && italic)
+            faces.Add($"latin-{kind}{(bold ? "-bold" : "")}-italic");
+        faces.Add($"{script}-{kind}{(bold ? "-bold" : "")}");
+        faces.Add($"{script}-{kind}");
+        faces.Add($"{script}-sans");
+        return faces;
+    }
+
+    /// <summary>True when the face's character map has the character (or the map couldn't be read).</summary>
+    public static bool Covers(string face, int codepoint)
+    {
+        (int Start, int End)[]? ranges;
+        lock (Gate)
+        {
+            if (!Coverage.TryGetValue(face, out ranges))
+                Coverage[face] = ranges = Resolve(face) is { } data ? ReadCharacterMap(data) : [];
+        }
+        if (ranges is null)
+            return true;
+        int low = 0, high = ranges.Length - 1;
+        while (low <= high)
+        {
+            int middle = (low + high) / 2;
+            if (codepoint < ranges[middle].Start)
+                high = middle - 1;
+            else if (codepoint > ranges[middle].End)
+                low = middle + 1;
+            else
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The character ranges in a TrueType/OpenType font's cmap: the full-Unicode table (format 12) when there is one,
+    /// otherwise the basic one (format 4). Null when the font can't be read.
+    /// </summary>
+    public static (int Start, int End)[]? ReadCharacterMap(byte[] font)
+    {
+        try
+        {
+            var data = font.AsSpan();
+            int tables = BinaryPrimitives.ReadUInt16BigEndian(data[4..]);
+            int cmap = -1;
+            for (int i = 0; i < tables; i++)
+            {
+                if (BinaryPrimitives.ReadUInt32BigEndian(data[(12 + 16 * i)..]) == 0x636D6170) // "cmap"
+                    cmap = (int)BinaryPrimitives.ReadUInt32BigEndian(data[(12 + 16 * i + 8)..]);
+            }
+            if (cmap < 0)
+                return null;
+            int count = BinaryPrimitives.ReadUInt16BigEndian(data[(cmap + 2)..]);
+            int basic = -1, full = -1;
+            for (int i = 0; i < count; i++)
+            {
+                var record = data[(cmap + 4 + 8 * i)..];
+                int platform = BinaryPrimitives.ReadUInt16BigEndian(record), encoding = BinaryPrimitives.ReadUInt16BigEndian(record[2..]);
+                int offset = cmap + (int)BinaryPrimitives.ReadUInt32BigEndian(record[4..]);
+                int format = BinaryPrimitives.ReadUInt16BigEndian(data[offset..]);
+                if (platform == 3 && encoding == 10 || platform == 0 && encoding >= 4)
+                    full = format == 12 ? offset : full;
+                else if (platform == 3 && encoding == 1 || platform == 0)
+                    basic = format == 4 && basic < 0 ? offset : basic;
+            }
+            var ranges = new List<(int, int)>();
+            if (full >= 0)
+            {
+                int groups = (int)BinaryPrimitives.ReadUInt32BigEndian(data[(full + 12)..]);
+                for (int i = 0; i < groups; i++)
+                {
+                    var group = data[(full + 16 + 12 * i)..];
+                    ranges.Add(((int)BinaryPrimitives.ReadUInt32BigEndian(group), (int)BinaryPrimitives.ReadUInt32BigEndian(group[4..])));
+                }
+            }
+            else if (basic >= 0)
+            {
+                int segments = BinaryPrimitives.ReadUInt16BigEndian(data[(basic + 6)..]) / 2;
+                for (int i = 0; i < segments; i++)
+                {
+                    int end = BinaryPrimitives.ReadUInt16BigEndian(data[(basic + 14 + 2 * i)..]);
+                    int start = BinaryPrimitives.ReadUInt16BigEndian(data[(basic + 16 + 2 * segments + 2 * i)..]);
+                    if (start != 0xFFFF)
+                        ranges.Add((start, end));
+                }
+            }
+            else
+            {
+                return null;
+            }
+            return ranges.OrderBy(r => r.Item1).ToArray();
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
     }
 
     public FontResolverInfo? ResolveTypeface(string familyName, bool bold, bool italic)
