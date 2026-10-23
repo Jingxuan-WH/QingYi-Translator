@@ -98,6 +98,7 @@ internal sealed class LiveTranscriber : IDisposable
             StopCapture();
             throw;
         }
+        Log.Info($"开始录音：{(_microphone is null ? "" : $"麦克风“{_microphone.Name}” ")}{(_system is null ? "" : $"播放设备“{_system.Name}”（电脑的声音）")}");
     }
 
     /// <summary>Releases the devices; the sentence in progress is finished. The model stays loaded.</summary>

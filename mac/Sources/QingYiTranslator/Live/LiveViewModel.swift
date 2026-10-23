@@ -61,6 +61,8 @@ final class LiveViewModel: ObservableObject {
     private var status: (() -> String)?
     /// The languages whose model was just downloaded, while starting again after the download.
     private var downloadedLanguages: [Language] = []
+    /// The banner says the microphone delivers only silence; it goes away once something is heard.
+    private var microphoneSilentHint = false
     private var subscriptions = Set<AnyCancellable>()
 
     init(settings: AppSettings, glossary: Glossary) {
@@ -217,10 +219,25 @@ final class LiveViewModel: ObservableObject {
             guard let self, let session, self.session === session else { return }
             micLevel = microphone
             systemLevel = system
+            if microphone > SilenceWatch.threshold, microphoneSilentHint {
+                microphoneSilentHint = false
+                if banner?.kind == .permission(.microphone) {
+                    banner = nil
+                }
+            }
         }
         session.onFailure = { [weak self, weak session] message in
             guard let self, let session, self.session === session else { return }
             showBanner(.error) { message }
+        }
+        session.onMicrophoneSilent = { [weak self, weak session] in
+            guard let self, let session, self.session === session, state == .running, banner == nil else { return }
+            Log.info("实时转录：麦克风一直没有声音")
+            microphoneSilentHint = true
+            showBanner(.permission(.microphone)) {
+                L("麦克风到现在还没有收到声音。如果你已经在说话，请检查麦克风没有静音、选对了设备，以及“系统设置 › 声音 › 输入”里的输入音量；更新轻译后麦克风授权可能失效（这时只会收到静音），可以点“重置权限”后重新开始。",
+                  "The microphone hasn’t picked up any sound yet. If you are already speaking, check that it isn’t muted, the right device is picked and the input volume under System Settings › Sound › Input isn’t zero. After an update the microphone permission may no longer apply (the app then only receives silence); click “Reset permission” and start again.")
+            }
         }
         session.onSystemAudioSilent = { [weak self, weak session] in
             guard let self, let session, self.session === session else { return }

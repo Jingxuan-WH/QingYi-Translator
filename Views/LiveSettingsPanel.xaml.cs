@@ -85,7 +85,9 @@ public partial class LiveSettingsPanel : UserControl
             : Loc.T("第一次开始实时转录时下载。识别完全在本机进行，声音不会上传。", "Downloaded the first time you start live transcription. Recognition runs entirely on this PC; no audio is uploaded.");
 
         bool loadedGpu = WhisperRuntime.Loaded == Whisper.net.LibraryLoader.RuntimeLibrary.Vulkan;
-        GpuHint.Text = !WhisperRuntime.HasVulkanDriver
+        GpuHint.Text = WhisperRuntime.IsEmulated
+            ? Loc.T("轻译正在模拟运行（例如 ARM 版 Windows），GPU 加速不可用，将使用 CPU。", "QingYi runs emulated (e.g. on Windows on ARM), so GPU acceleration isn’t available; the CPU is used.")
+            : !WhisperRuntime.HasVulkanDriver
             ? Loc.T("没有检测到支持 Vulkan 的显卡驱动，将使用 CPU。", "No graphics driver with Vulkan support was found; the CPU is used.")
             : WhisperRuntime.IsGpuInstalled
                 ? loadedGpu || WhisperRuntime.Loaded is null

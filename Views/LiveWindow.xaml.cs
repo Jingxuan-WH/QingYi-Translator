@@ -28,6 +28,7 @@ public partial class LiveWindow : Window
     private readonly LiveTranslationContext _context = new();
     private readonly Queue<TranscriptLine> _translationQueue = new();
     private readonly System.Windows.Threading.DispatcherTimer _draftTimer = new() { Interval = DraftDelay };
+    private readonly SilenceWatch _micWatch = new();
     private readonly List<ChoiceOption> _sourceOptions =
     [
         new(LiveSettings.SourceMicrophone, new LocText("麦克风", "Microphone")),
@@ -60,7 +61,7 @@ public partial class LiveWindow : Window
 
     private enum LiveState { Idle, Downloading, Loading, Running, Paused }
 
-    private enum BannerKind { None, Info, Download, GpuOffer, Error, ModelError, Settings, MicrophonePrivacy, VisualCpp }
+    private enum BannerKind { None, Info, Download, GpuOffer, Error, Settings, MicrophonePrivacy, MicrophoneSilent, VisualCpp }
 
     internal LiveWindow(AppSettings settings, Glossary glossary)
     {
@@ -123,11 +124,13 @@ public partial class LiveWindow : Window
 
     public void BringToFront() => WindowUtil.ForceForeground(this);
 
-    /// <summary>The global hotkey: starts listening, or stops when already listening.</summary>
+    /// <summary>The global hotkey: starts listening (or resumes after a pause), or stops when already listening.</summary>
     public void ToggleRunning()
     {
         if (IsRunning)
             Stop();
+        else if (_state == LiveState.Paused)
+            Resume();
         else
             _ = StartAsync();
     }
@@ -154,18 +157,49 @@ public partial class LiveWindow : Window
 
     private void StopButton_Click(object sender, RoutedEventArgs e) => Stop();
 
+    /// <summary>
+    /// Checks the model and the engine, loads them and starts listening. Never throws: whatever goes wrong ends with a
+    /// banner and the window ready to start again.
+    /// </summary>
     private async Task StartAsync()
     {
         if (_state != LiveState.Idle)
             return;
+        int session = ++_session;
+        try
+        {
+            await StartSessionAsync(session);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("无法开始实时转录", ex);
+            if (session != _session)
+                return;
+            _transcriber?.Dispose();
+            _transcriber = null;
+            _state = LiveState.Idle;
+            UpdateControls();
+            SetStatus(null);
+            ShowBanner(BannerKind.Error, () => Loc.T($"无法开始实时转录：{ex.Message}", $"Couldn’t start live transcription: {ex.Message}"));
+        }
+    }
+
+    // Stop() moves _session on, so every await is followed by a check that this start is still wanted.
+    private async Task StartSessionAsync(int session)
+    {
         HideBanner();
         var model = WhisperModels.Find(_settings.Live.Model);
+        Language? source = SelectedSourceLanguage;
+        Log.Info($"实时转录：开始（音源 {_settings.Live.AudioSource}，语言 {source?.Code ?? Languages.AutoCode}，模型 {model.Id}，"
+            + $"GPU 加速{(_settings.Live.UseGpu ? "开" : "关")}）");
         if (!WhisperModels.IsDownloaded(model))
         {
             _state = LiveState.Loading;
             UpdateControls();
             SetStatus(() => Loc.T("正在检查语音模型…", "Checking the speech model…"));
             bool ready = await WhisperModels.VerifyAsync(model, CancellationToken.None);
+            if (session != _session)
+                return; // stopped meanwhile
             _state = LiveState.Idle;
             UpdateControls();
             SetStatus(null);
@@ -175,15 +209,20 @@ public partial class LiveWindow : Window
                 return;
             }
         }
-        if (!WhisperRuntime.HasVisualCppRuntime && WhisperRuntime.Loaded is null)
+        if (WhisperRuntime.LoadFailed)
+        {
+            ShowRestartBanner();
+            return;
+        }
+        if (WhisperRuntime.Loaded is null && WhisperRuntime.CheckVisualCppRuntime() is { } problem)
         {
             ShowBanner(BannerKind.VisualCpp,
-                () => Loc.T("语音识别引擎需要微软的 Visual C++ 运行库（大多数电脑已经装过）。请下载安装（约 25 MB）后再点“开始”。",
-                    "The speech recognition engine needs Microsoft’s Visual C++ runtime (most PCs already have it). Install it (about 25 MB), then click Start again."),
+                () => Loc.T($"语音识别引擎需要微软的 Visual C++ 运行库 14.40 或更新的版本（{problem}）。请下载安装（约 25 MB）后再点“开始”。",
+                    $"The speech recognition engine needs Microsoft’s Visual C++ runtime 14.40 or later ({problem}). Install it (about 25 MB), then click Start again."),
                 () => Loc.T("下载 Visual C++ 运行库", "Download the Visual C++ runtime"));
             return;
         }
-        if (_settings.Live.UseGpu && !_gpuOfferDismissed && WhisperRuntime.HasVulkanDriver && !WhisperRuntime.IsGpuInstalled
+        if (_settings.Live.UseGpu && !_gpuOfferDismissed && WhisperRuntime.CanUseGpu && !WhisperRuntime.IsGpuInstalled
             && WhisperRuntime.Loaded is null)
         {
             ShowGpuOffer();
@@ -194,8 +233,6 @@ public partial class LiveWindow : Window
         UpdateControls();
         SetStatus(() => Loc.T($"正在加载语音模型 {model.DisplayName}…", $"Loading the speech model {model.DisplayName}…"));
         var transcriber = new LiveTranscriber(SynchronizationContext.Current!);
-        int session = ++_session;
-        Language? source = SelectedSourceLanguage;
         try
         {
             bool useGpu = _settings.Live.UseGpu;
@@ -207,14 +244,7 @@ public partial class LiveWindow : Window
             if (session != _session || ex is OperationCanceledException)
                 return; // stopped while loading
             Log.Error("加载语音模型失败", ex);
-            _state = LiveState.Idle;
-            UpdateControls();
-            SetStatus(null);
-            if (ex is WhisperModelLoadException)
-                ShowBanner(BannerKind.ModelError, () => Loc.T($"无法加载语音模型：{ex.Message}", $"Couldn’t load the speech model: {ex.Message}"),
-                    () => Loc.T("重新下载模型", "Download the model again"));
-            else
-                ShowBanner(BannerKind.Error, () => Loc.T($"无法启动语音识别引擎：{ex.Message}", $"Couldn’t start the speech recognition engine: {ex.Message}"));
+            await ShowLoadErrorAsync(model, ex, session);
             return;
         }
         if (session != _session || _state != LiveState.Loading)
@@ -243,11 +273,11 @@ public partial class LiveWindow : Window
         };
         transcriber.Levels += (mic, system) =>
         {
-            if (transcriber == _transcriber)
-            {
-                MicLevel.Value = mic;
-                SystemLevel.Value = system;
-            }
+            if (transcriber != _transcriber)
+                return;
+            MicLevel.Value = mic;
+            SystemLevel.Value = system;
+            WatchMicrophone(mic);
         };
         transcriber.Failed += message =>
         {
@@ -255,6 +285,54 @@ public partial class LiveWindow : Window
                 ShowBanner(BannerKind.Error, () => message);
         };
         Resume();
+    }
+
+    /// <summary>
+    /// Explains why the engine or the model didn't load. Only a model file that fails its checksum is offered for
+    /// download again: too little memory, or a GPU that can't take the model, would fail the same way after a new download.
+    /// </summary>
+    private async Task ShowLoadErrorAsync(WhisperModelInfo model, Exception error, int session)
+    {
+        if (error is WhisperModelLoadException)
+        {
+            SetStatus(() => Loc.T("正在检查语音模型…", "Checking the speech model…"));
+            bool intact = await WhisperModels.VerifyAsync(model, CancellationToken.None, recheck: true);
+            if (session != _session)
+                return;
+            _state = LiveState.Idle;
+            UpdateControls();
+            SetStatus(null);
+            if (!intact)
+            {
+                ShowDownloadBanner(model);
+                ShowBannerError(() => Loc.T($"语音模型 {model.DisplayName} 的文件已损坏，已经删除，请重新下载。",
+                    $"The file of the speech model {model.DisplayName} was damaged and has been deleted. Please download it again."));
+                return;
+            }
+            bool gpu = WhisperRuntime.Loaded == RuntimeLibrary.Vulkan;
+            ShowBanner(BannerKind.Settings, () => gpu
+                    ? Loc.T($"语音模型 {model.DisplayName} 的文件完好，但识别引擎无法加载它（{error.Message}），可能是内存或显存不够。可以在设置里换一个更小的模型，或者关闭 GPU 加速后重新打开轻译。",
+                        $"The speech model {model.DisplayName} is intact, but the engine couldn’t load it ({error.Message}); there may not be enough memory or graphics memory. Pick a smaller model in Settings, or turn GPU acceleration off and restart QingYi.")
+                    : Loc.T($"语音模型 {model.DisplayName} 的文件完好，但识别引擎无法加载它（{error.Message}），可能是内存不够。可以关掉一些程序再试，或者在设置里换一个更小的模型。",
+                        $"The speech model {model.DisplayName} is intact, but the engine couldn’t load it ({error.Message}); there may not be enough memory. Close some programs and try again, or pick a smaller model in Settings."),
+                () => Loc.T("打开设置", "Open settings"));
+            return;
+        }
+        _state = LiveState.Idle;
+        UpdateControls();
+        SetStatus(null);
+        if (error is WhisperRuntimeException)
+            ShowRestartBanner();
+        else
+            ShowBanner(BannerKind.Error, () => Loc.T($"无法启动语音识别引擎：{error.Message}", $"Couldn’t start the speech recognition engine: {error.Message}"));
+    }
+
+    // Whisper.net remembers a failed load of its native library for the rest of the process.
+    private void ShowRestartBanner()
+    {
+        ShowBanner(BannerKind.Error,
+            () => Loc.T("语音识别引擎没能加载，要重新打开轻译后才能再试：请从托盘图标的菜单里选“退出”，再打开轻译（刚装好或更新了 Visual C++ 运行库时也需要这样）。详细信息已写入日志。",
+                "The speech recognition engine couldn’t be loaded and can only be tried again after QingYi restarts: choose Exit in the tray icon’s menu, then open QingYi again (also needed right after installing or updating the Visual C++ runtime). Details were written to the log."));
     }
 
     private void Resume()
@@ -274,13 +352,44 @@ public partial class LiveWindow : Window
                 ex.MicrophonePrivacy ? () => Loc.T("打开隐私设置", "Open privacy settings") : null);
             return;
         }
-        if (_banner is BannerKind.MicrophonePrivacy or BannerKind.Error)
+        catch (Exception ex)
+        {
+            Log.Error("无法开始录音", ex);
+            _state = LiveState.Paused;
+            UpdateControls();
+            SetStatus(() => Loc.T("没有在聆听", "Not listening"));
+            ShowBanner(BannerKind.Error, () => Loc.T($"无法开始录音：{ex.Message}", $"Couldn’t start recording: {ex.Message}"));
+            return;
+        }
+        if (_banner is BannerKind.MicrophonePrivacy or BannerKind.MicrophoneSilent or BannerKind.Error)
             HideBanner();
+        _micWatch.Reset();
         _state = LiveState.Running;
         UpdateControls();
         string runtime = WhisperRuntime.DescribeLoaded();
         SetStatus(() => Loc.T($"正在聆听 · {WhisperModels.Find(_settings.Live.Model).DisplayName} · {runtime}",
             $"Listening · {WhisperModels.Find(_settings.Live.Model).DisplayName} · {runtime}"));
+    }
+
+    // A microphone that has given nothing but silence so far: muted, blocked by the privacy settings (Windows then
+    // hands desktop apps silence) or not shared with a virtual machine.
+    private void WatchMicrophone(float level)
+    {
+        bool microphone = _settings.Live.AudioSource is LiveSettings.SourceMicrophone or LiveSettings.SourceBoth;
+        if (_state != LiveState.Running || !microphone)
+            return;
+        if (level > SilenceWatch.Threshold)
+        {
+            if (_banner == BannerKind.MicrophoneSilent)
+                HideBanner();
+        }
+        if (_micWatch.Update(level, Environment.TickCount64 / 1000.0) && _banner == BannerKind.None)
+        {
+            ShowBanner(BannerKind.MicrophoneSilent,
+                () => Loc.T("麦克风到现在还没有收到声音。如果你已经在说话，请检查：麦克风没有静音，上面选对了设备；“设置 › 隐私和安全性 › 麦克风”中允许了桌面应用使用麦克风（不允许时 Windows 只给静音）；在虚拟机里要先把麦克风共享给虚拟机。",
+                    "The microphone hasn’t picked up any sound yet. If you are already speaking, check that it isn’t muted and the right device is picked above; that desktop apps may use the microphone under Settings › Privacy & security › Microphone (otherwise Windows only hands over silence); and, in a virtual machine, that the microphone is shared with it."),
+                () => Loc.T("打开隐私设置", "Open privacy settings"), () => Loc.T("关闭", "Dismiss"));
+        }
     }
 
     /// <summary>Releases the devices and the model; the sentence in progress is still finished and translated.</summary>
@@ -441,7 +550,7 @@ public partial class LiveWindow : Window
     {
         var source = WhisperModels.ResolveSource(_settings.Live.DownloadSource);
         DownloadSourceBox.SelectedItem = _downloadSources.First(option => option.Id == source.Id);
-        bool offerGpu = _settings.Live.UseGpu && WhisperRuntime.HasVulkanDriver && !WhisperRuntime.IsGpuInstalled;
+        bool offerGpu = _settings.Live.UseGpu && WhisperRuntime.CanUseGpu && !WhisperRuntime.IsGpuInstalled;
         GpuDownloadToggle.Visibility = offerGpu ? Visibility.Visible : Visibility.Collapsed;
         GpuDownloadToggle.IsChecked = offerGpu;
         GpuDownloadToggle.Content = Loc.T($"同时下载 GPU 加速组件（约 {WhisperRuntime.GpuDownloadMegabytes} MB）",
@@ -510,10 +619,8 @@ public partial class LiveWindow : Window
                 ShowDownloadBanner(info);
             else
                 ShowGpuOffer();
-            _bannerText = () => ex.Message;
-            BannerText.Text = ex.Message;
+            ShowBannerError(() => ex.Message);
             BannerButton.Content = Loc.T("重试", "Retry");
-            Banner.SetResourceReference(Border.BackgroundProperty, "ErrorSoftBrush");
             return;
         }
         finally
@@ -527,7 +634,8 @@ public partial class LiveWindow : Window
         HideBanner();
         _gpuOfferDismissed = true;
         await StartAsync();
-        if (gpu && WhisperRuntime.Loaded is not RuntimeLibrary.Vulkan)
+        // Only once listening: a banner about why it didn't start matters more.
+        if (gpu && WhisperRuntime.Loaded is not RuntimeLibrary.Vulkan && _state is LiveState.Running or LiveState.Paused && _banner == BannerKind.None)
             ShowBanner(BannerKind.Info, () => Loc.T("GPU 加速组件已下载，重新打开轻译后生效。", "GPU acceleration was downloaded; it takes effect after QingYi restarts."));
     }
 
@@ -549,7 +657,8 @@ public partial class LiveWindow : Window
         _banner = kind;
         _bannerText = text;
         BannerText.Text = text();
-        Banner.SetResourceReference(Border.BackgroundProperty, kind is BannerKind.Error or BannerKind.ModelError or BannerKind.Settings or BannerKind.MicrophonePrivacy
+        Log.Info($"实时转录横幅：{kind}：{BannerText.Text}");
+        Banner.SetResourceReference(Border.BackgroundProperty, kind is BannerKind.Error or BannerKind.Settings or BannerKind.MicrophonePrivacy or BannerKind.VisualCpp
             ? "ErrorSoftBrush" : "AccentSoftBrush");
         BannerButton.Content = button?.Invoke() ?? Loc.T("关闭", "Dismiss");
         BannerButton.Tag = button;
@@ -559,6 +668,15 @@ public partial class LiveWindow : Window
         DownloadOptions.Visibility = Visibility.Collapsed;
         BannerProgress.Visibility = Visibility.Collapsed;
         Banner.Visibility = Visibility.Visible;
+    }
+
+    // Keeps the banner's buttons but shows what went wrong.
+    private void ShowBannerError(Func<string> text)
+    {
+        _bannerText = text;
+        BannerText.Text = text();
+        Log.Info($"实时转录横幅：{_banner}：{BannerText.Text}");
+        Banner.SetResourceReference(Border.BackgroundProperty, "ErrorSoftBrush");
     }
 
     private void HideBanner()
@@ -587,16 +705,12 @@ public partial class LiveWindow : Window
                 HideBanner();
                 App.OpenSettings();
                 break;
-            case BannerKind.MicrophonePrivacy:
+            case BannerKind.MicrophonePrivacy or BannerKind.MicrophoneSilent:
                 App.OpenUrl("ms-settings:privacy-microphone");
                 break;
             case BannerKind.VisualCpp:
                 App.OpenUrl(WhisperRuntime.VisualCppDownloadUrl);
                 HideBanner();
-                break;
-            case BannerKind.ModelError:
-                WhisperModels.Delete(WhisperModels.Find(_settings.Live.Model));
-                ShowDownloadBanner(WhisperModels.Find(_settings.Live.Model));
                 break;
             default:
                 HideBanner();
@@ -606,7 +720,11 @@ public partial class LiveWindow : Window
 
     private async void BannerLinkButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_banner == BannerKind.GpuOffer)
+        if (_banner == BannerKind.MicrophoneSilent)
+        {
+            HideBanner();
+        }
+        else if (_banner == BannerKind.GpuOffer)
         {
             // Not asked again; GPU acceleration can be turned back on in Settings.
             _settings.Live.UseGpu = false;

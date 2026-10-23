@@ -1,14 +1,17 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Translator.Core;
 using Whisper.net;
 using Whisper.net.LibraryLoader;
+using Whisper.net.Logger;
 
 namespace Translator.Platform;
 
@@ -27,7 +30,12 @@ internal static class WhisperRuntime
     private const string NuGetBase = "https://api.nuget.org/v3-flatcontainer/";
     private const string MirrorIndex = "https://repo.huaweicloud.com/repository/nuget/v3/index.json";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private static readonly string[] VisualCppLibraries = ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll"];
+    // Programs built with Visual Studio 17.10 or later (whisper.cpp is) crash in std::mutex with an older runtime.
+    private static readonly Version MinimumVisualCpp = new(14, 40);
     private static bool _configured;
+    private static IDisposable? _logger;
+    private static Exception? _loadError;
 
     public static string Directory { get; } = Path.Combine(Path.GetDirectoryName(WhisperModels.Directory)!, $"whisper-runtime-{Version}");
 
@@ -38,16 +46,75 @@ internal static class WhisperRuntime
     /// <summary>GPU drivers with Vulkan support install vulkan-1.dll; without it the GPU build can't run.</summary>
     public static bool HasVulkanDriver => File.Exists(Path.Combine(Environment.SystemDirectory, "vulkan-1.dll"));
 
+    /// <summary>The x64 app runs emulated, e.g. on Windows on ARM.</summary>
+    public static bool IsEmulated => RuntimeInformation.ProcessArchitecture != RuntimeInformation.OSArchitecture;
+
+    /// <summary>
+    /// Whether GPU acceleration is worth offering. Under emulation the x64 Vulkan build is untested (the driver is
+    /// native), so only the CPU is used there.
+    /// </summary>
+    public static bool CanUseGpu => HasVulkanDriver && !IsEmulated;
+
     /// <summary>Microsoft's installer for the Visual C++ runtime that whisper.cpp is built against.</summary>
     public const string VisualCppDownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 
     /// <summary>
-    /// whisper.cpp needs the Visual C++ 2015–2022 runtime (x64). Most PCs have it from other programs, but a fresh
-    /// Windows may not, and its license doesn't allow shipping it here, so the user is pointed to Microsoft's installer.
+    /// whisper.cpp needs the Visual C++ 2015–2022 runtime (x64), version 14.40 or later. Most PCs have it from other
+    /// programs, but a fresh Windows may not, and its license doesn't allow shipping it here, so the user is pointed to
+    /// Microsoft's installer. Each library is loaded the way whisper.cpp will load it, and its version checked.
     /// </summary>
-    public static bool HasVisualCppRuntime =>
-        new[] { "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll" }
-            .All(name => File.Exists(Path.Combine(Environment.SystemDirectory, name)));
+    /// <returns>Null when the runtime is fine; otherwise what is missing or too old.</returns>
+    public static string? CheckVisualCppRuntime()
+    {
+        var found = new List<string>();
+        var problems = new List<string>();
+        foreach (string name in VisualCppLibraries)
+        {
+            if (!NativeLibrary.TryLoad(name, out IntPtr handle))
+            {
+                problems.Add(Loc.T($"缺少 {name}", $"{name} is missing"));
+                continue;
+            }
+            try
+            {
+                string? path = ModulePath(handle);
+                var info = path is null ? null : FileVersionInfo.GetVersionInfo(path);
+                var version = info is null ? null : new Version(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart);
+                found.Add($"{name} {version?.ToString() ?? "?"}（{path}）");
+                if (version is not null && version < MinimumVisualCpp)
+                    problems.Add(Loc.T($"{name} 的版本 {version} 太旧", $"{name} is too old ({version})"));
+            }
+            finally
+            {
+                NativeLibrary.Free(handle); // an updated runtime loads fresh next time
+            }
+        }
+        Log.Info($"Visual C++ 运行库：{(found.Count == 0 ? "-" : string.Join("；", found))}{(problems.Count == 0 ? "" : "；问题：" + string.Join("；", problems))}");
+        return problems.Count == 0 ? null : string.Join(Loc.T("；", "; "), problems);
+    }
+
+    /// <summary>The native library failed to load; Whisper.net keeps that result until the app restarts.</summary>
+    public static bool LoadFailed => _loadError is not null;
+
+    /// <summary>Loads the native library if that hasn't happened yet. Throws <see cref="WhisperRuntimeException"/>.</summary>
+    public static void EnsureLoaded()
+    {
+        if (Loaded is not null)
+            return;
+        if (_loadError is not null)
+            throw new WhisperRuntimeException(_loadError);
+        try
+        {
+            string? info = WhisperFactory.GetRuntimeInfo();
+            Log.Info($"已加载 whisper.cpp 运行库：{Loaded}；{info?.Trim()}");
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex;
+            Log.Error("无法加载 whisper.cpp 运行库", ex);
+            throw new WhisperRuntimeException(ex);
+        }
+    }
 
     /// <summary>Which build was loaded: "Vulkan", "Cpu" or "CpuNoAvx"; null before the first model is loaded.</summary>
     public static RuntimeLibrary? Loaded => RuntimeOptions.LoadedLibrary;
@@ -60,6 +127,7 @@ internal static class WhisperRuntime
     {
         if (_configured)
             return;
+        _logger ??= LogProvider.AddLogger(OnWhisperLog);
         var assembly = typeof(WhisperRuntime).Assembly;
         foreach (string resource in assembly.GetManifestResourceNames())
         {
@@ -71,11 +139,41 @@ internal static class WhisperRuntime
         }
         // Whisper.net looks for "runtimes\…" next to the directory of this path.
         RuntimeOptions.LibraryPath = Path.Combine(Directory, "whisper.dll");
-        RuntimeOptions.RuntimeLibraryOrder = useGpu && IsGpuInstalled
-            ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx]
-            : [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
+        // The AVX build may load on a CPU without AVX2 / FMA and then crash on the first sentence; use the other one there.
+        bool avx = Avx.IsSupported && Avx2.IsSupported && Fma.IsSupported;
+        var order = new List<RuntimeLibrary>();
+        if (useGpu && IsGpuInstalled && !IsEmulated)
+            order.Add(RuntimeLibrary.Vulkan);
+        if (avx)
+            order.Add(RuntimeLibrary.Cpu);
+        order.Add(RuntimeLibrary.CpuNoAvx);
+        RuntimeOptions.RuntimeLibraryOrder = order;
+        Log.Info($"whisper.cpp 运行库：{Directory}，加载顺序 {string.Join(" → ", order)}（AVX {Avx.IsSupported}、AVX2 {Avx2.IsSupported}、FMA {Fma.IsSupported}；"
+            + $"进程 {RuntimeInformation.ProcessArchitecture}，系统 {RuntimeInformation.OSArchitecture}）");
         _configured = true;
     }
+
+    // whisper.cpp's own errors and warnings, and the loader's reasons for skipping a build, go to the app log.
+    private static void OnWhisperLog(WhisperLogLevel level, string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+        message = message.Trim();
+        if (level == WhisperLogLevel.Error)
+            Log.Error($"whisper.cpp：{message}");
+        else if (level == WhisperLogLevel.Warning || (level == WhisperLogLevel.Debug && message.Contains("fail", StringComparison.OrdinalIgnoreCase)))
+            Log.Info($"whisper.cpp：{message}");
+    }
+
+    private static string? ModulePath(IntPtr module)
+    {
+        var buffer = new char[1024];
+        int length = GetModuleFileName(module, buffer, buffer.Length);
+        return length > 0 ? new string(buffer, 0, length) : null;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetModuleFileNameW", SetLastError = true)]
+    private static extern int GetModuleFileName(IntPtr hModule, [Out] char[] lpFilename, int nSize);
 
     public static string DescribeLoaded() => Loaded switch
     {
@@ -130,7 +228,12 @@ internal static class WhisperRuntime
             }
         }, ct);
         File.Delete(package);
-        Log.Info("已下载 GPU 加速组件（Vulkan）");
+        if (!IsGpuInstalled)
+        {
+            Log.Error($"GPU 加速组件解压后缺少文件：{GpuDirectory}");
+            throw new DownloadException(Loc.T("GPU 加速组件的文件不完整，无法使用。", "The GPU acceleration files are incomplete and can’t be used."));
+        }
+        Log.Info($"已下载 GPU 加速组件（Vulkan）：{GpuDirectory}");
     }
 
     private static Uri PackageUrl(string baseUrl) =>
@@ -167,6 +270,9 @@ internal static class WhisperRuntime
     }
 }
 
+/// <summary>The native whisper.cpp library couldn't be loaded; the app has to restart before it is tried again.</summary>
+internal sealed class WhisperRuntimeException(Exception inner) : Exception(inner.Message, inner);
+
 internal readonly record struct RecognizedText(string Text, string? Language);
 
 /// <summary>
@@ -193,6 +299,7 @@ internal sealed class WhisperRecognizer : IDisposable
     public static WhisperRecognizer Load(string modelPath, Language? source, bool useGpu)
     {
         WhisperRuntime.Prepare(useGpu);
+        WhisperRuntime.EnsureLoaded();
         var factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = useGpu });
         try
         {
@@ -242,6 +349,8 @@ internal sealed class WhisperRecognizer : IDisposable
             return new RecognizedText("", detected);
         if (detected == "zh" && _source != Languages.TraditionalChinese)
             result = ChineseScript.ToSimplified(result);
+        if (detected == "zh" || _source?.IsChinese == true)
+            result = SpeechText.UseChinesePunctuation(result);
         return new RecognizedText(result, detected);
     }
 

@@ -73,10 +73,11 @@ public static class WhisperModels
     /// Checks a model that is on disk but not yet marked as verified (e.g. copied there by hand). A file that fails
     /// the check is deleted so the next download starts clean.
     /// </summary>
-    public static async Task<bool> VerifyAsync(WhisperModelInfo model, CancellationToken ct)
+    /// <param name="recheck">Hashes the file even if it was verified before, e.g. after the engine couldn't load it.</param>
+    public static async Task<bool> VerifyAsync(WhisperModelInfo model, CancellationToken ct, bool recheck = false)
     {
         string path = PathFor(model);
-        if (IsMarkedVerified(path, model.Sha1))
+        if (!recheck && IsMarkedVerified(path, model.Sha1))
             return true;
         if (!File.Exists(path))
             return false;
@@ -86,7 +87,7 @@ public static class WhisperModels
             return true;
         }
         Log.Info($"模型文件校验失败，已删除：{path}");
-        TryDelete(path);
+        Delete(model);
         return false;
     }
 
@@ -203,7 +204,7 @@ public static class WhisperModels
         {
             return File.Exists(path) && File.Exists(MarkerPath(path)) && File.ReadAllText(MarkerPath(path)) == MarkerText(path, sha1);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
