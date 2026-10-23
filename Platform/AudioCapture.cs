@@ -88,34 +88,40 @@ internal sealed class AudioCapture : IDisposable
     public static AudioCapture Microphone(string? deviceId)
     {
         MMDevice device;
+        string name;
         try
         {
             using var enumerator = new MMDeviceEnumerator();
             device = TryGetDevice(enumerator, deviceId) ?? enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            name = device.FriendlyName;
         }
         catch (COMException ex)
         {
+            Log.Error("找不到麦克风", ex);
             throw new AudioCaptureException(Loc.T("没有找到麦克风，请检查麦克风是否已连接并在系统声音设置中启用。",
                 "No microphone was found. Check that one is connected and enabled in the Windows sound settings."), inner: ex);
         }
-        return Open(() => new WasapiCapture(device), device.FriendlyName, microphone: true);
+        return Open(() => new WasapiCapture(device), name, microphone: true);
     }
 
     /// <summary>Loopback recording of the default playback device.</summary>
     public static AudioCapture SystemAudio()
     {
         MMDevice device;
+        string name;
         try
         {
             using var enumerator = new MMDeviceEnumerator();
             device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            name = device.FriendlyName;
         }
         catch (COMException ex)
         {
+            Log.Error("找不到播放设备", ex);
             throw new AudioCaptureException(Loc.T("没有找到播放设备（扬声器或耳机），无法录制电脑的声音。",
                 "No playback device (speakers or headphones) was found, so the PC's sound can't be recorded."), inner: ex);
         }
-        return Open(() => new WasapiLoopbackCapture(device), device.FriendlyName, microphone: false);
+        return Open(() => new WasapiLoopbackCapture(device), name, microphone: false);
     }
 
     public void Start()

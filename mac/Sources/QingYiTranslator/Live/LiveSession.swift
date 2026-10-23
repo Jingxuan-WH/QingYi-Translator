@@ -15,6 +15,8 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
     var onFailure: ((String) -> Void)?
     /// Another app is playing sound but the system audio stays silent: most likely the permission is missing.
     var onSystemAudioSilent: (() -> Void)?
+    /// The microphone has delivered only silence since listening started.
+    var onMicrophoneSilent: (() -> Void)?
 
     private let queue = DispatchQueue(label: "com.jingxuanwh.QingYiTranslator.live", qos: .userInitiated)
     private let segmenter = SpeechSegmenter()
@@ -27,6 +29,8 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
     private var lastLevelReport: Int64 = 0
     private var systemAudioStarted: Int64?
     private var heardSystemAudio = false
+    private let microphoneWatch = SilenceWatch()
+    private var watchingMicrophone = false
 
     // Main thread: results of each utterance, gathered until every recognizer has answered.
     private var pending: [Int: Pending] = [:]
@@ -47,12 +51,13 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
                 guard let self, let recognizer else { return }
                 // While several languages listen, show the one that won the last sentence.
                 if recognizer.language == preferred || self.recognizers.count == 1 {
-                    onPartial?(utterance, text, pending[utterance]?.start ?? 0)
+                    onPartial?(utterance, LiveSession.tidy(text, recognizer.language), pending[utterance]?.start ?? 0)
                 }
             }
             recognizer.onFinal = { [weak self, weak recognizer] utterance, text, confidence in
                 guard let self, let recognizer else { return }
-                pending[utterance]?.candidates.append(RecognitionCandidate(language: recognizer.language, text: text, confidence: confidence))
+                pending[utterance]?.candidates.append(RecognitionCandidate(language: recognizer.language, text: LiveSession.tidy(text, recognizer.language),
+                                                                           confidence: confidence))
                 completeIfReady(utterance)
             }
         }
@@ -90,6 +95,10 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
             throw error
         }
         sources = opened
+        queue.sync {
+            microphoneWatch.reset()
+            watchingMicrophone = useMicrophone
+        }
         startTimer()
     }
 
@@ -106,6 +115,7 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
             mixer = nil
             levels = [0, 0]
             systemAudioStarted = nil
+            watchingMicrophone = false
         }
         DispatchQueue.main.async { [weak self] in self?.onLevels?(0, 0) }
     }
@@ -164,6 +174,9 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
             let microphone = levels[0], system = levels[1]
             levels = levels.map { $0 * 0.7 }
             DispatchQueue.main.async { [weak self] in self?.onLevels?(microphone, system) }
+            if watchingMicrophone && microphoneWatch.update(level: microphone, now: Double(now) / 1000) {
+                DispatchQueue.main.async { [weak self] in self?.onMicrophoneSilent?() }
+            }
         }
         if let started = systemAudioStarted, now - started > 5000 {
             systemAudioStarted = nil
@@ -217,4 +230,8 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
     }
 
     private static func now() -> Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
+
+    private static func tidy(_ text: String, _ language: Language) -> String {
+        language.isChinese ? SpeechText.useChinesePunctuation(text) : text
+    }
 }

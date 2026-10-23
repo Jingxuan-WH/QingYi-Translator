@@ -29,6 +29,48 @@ public static class SpeechText
         return text.TrimStart('-', ' ', '>');
     }
 
+    private const string HalfWidthMarks = ",?!:;";
+    private const string FullWidthMarks = "，？！：；";
+
+    /// <summary>
+    /// Whisper often writes ASCII commas and question marks in Chinese; Chinese text uses the full-width forms (and no
+    /// spaces around them). Marks between Latin letters or digits, as in "3,000", "10:30" or "Hello, world", stay.
+    /// </summary>
+    public static string UseChinesePunctuation(string text)
+    {
+        if (text.AsSpan().IndexOfAny(HalfWidthMarks) < 0)
+            return text;
+        var result = new StringBuilder(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            int mark = HalfWidthMarks.IndexOf(text[i]);
+            if (mark < 0 || (IsLatin(Neighbor(text, i, -1)) && IsLatin(Neighbor(text, i, 1))))
+            {
+                result.Append(text[i]);
+                continue;
+            }
+            while (result.Length > 0 && result[^1] == ' ')
+                result.Length--;
+            result.Append(FullWidthMarks[mark]);
+            while (i + 1 < text.Length && text[i + 1] == ' ')
+                i++;
+        }
+        return result.ToString();
+    }
+
+    // The nearest character that isn't a space, or '\0'.
+    private static char Neighbor(string text, int index, int step)
+    {
+        for (int i = index + step; i >= 0 && i < text.Length; i += step)
+        {
+            if (text[i] != ' ')
+                return text[i];
+        }
+        return '\0';
+    }
+
+    private static bool IsLatin(char c) => char.IsAsciiLetterOrDigit(c) || c is '/' or '.' or '%' or '-' or '_' or '@';
+
     public static bool IsLikelyHallucination(string text)
     {
         string key = Normalize(text);
