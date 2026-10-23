@@ -112,7 +112,7 @@ public final class PdfDocumentFile: TranslatableDocument {
     /// The characters of a page with their boxes, font and colour. Spaces stay out; the gaps between words show them.
     /// Text, box and font come from the same one-character selection: `page.string` can contain characters that
     /// `characterBounds(at:)` doesn't count, which would give every following character its neighbour's box.
-    /// PDFKit reports either the font's full height or just the ink of each letter, so the boxes are rebuilt from
+    /// PDFKit reports the font's full height, the line's height or just the ink of each letter, so the boxes are rebuilt from
     /// each line's baseline (a sub/superscript's own) and font size, as on Windows: [baseline − 0.25 × size, baseline + 0.8 × size].
     static func glyphs(of page: PDFPage) -> [PdfGlyph] {
         var chars: [RawChar] = []
@@ -183,7 +183,8 @@ public final class PdfDocumentFile: TranslatableDocument {
             let heights = line.map { Double($0.box.height) }
             let tallest = heights.max()!
             // The font size from the attributes, unless the text was scaled by its matrix (size 1 drawn at 10): 0 then.
-            let sizes = line.map { $0.points > 0 && $0.points >= 0.6 * Double($0.box.height) ? $0.points : 0 }
+            // Boxes can be as tall as the whole line, so a subscript's size is often well below its box's height.
+            let sizes = line.map { $0.points > 0 && $0.points >= 0.25 * Double($0.box.height) ? $0.points : 0 }
             let mainSize = sizes.max()!
             // Full-size characters share the line's baseline; sub/superscripts keep their own.
             let isMain = sizes.map { mainSize == 0 || $0 >= 0.85 * mainSize }
