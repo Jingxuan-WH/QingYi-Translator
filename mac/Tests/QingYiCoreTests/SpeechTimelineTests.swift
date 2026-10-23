@@ -31,14 +31,26 @@ struct SpeechTimelineTests {
     @Test func segmentedAudioNeverOverlaps() {
         let rate = 16000
         func tone(_ seconds: Double) -> [Float] {
-            (0..<Int(seconds * Double(rate))).map { i in
-                let syllable = i % (rate * 240 / 1000) < rate * 200 / 1000
-                return Float(syllable ? 0.3 : 0.02) * sin(Float(i) * 2 * .pi * 220 / Float(rate))
+            (0..<Int(seconds * Double(rate))).map { i -> Float in
+                // 200 ms syllables with 40 ms gaps
+                let amplitude: Float = i % (rate * 240 / 1000) < rate * 200 / 1000 ? 0.3 : 0.02
+                let phase = Float(i) * 2 * Float.pi * 220 / Float(rate)
+                return amplitude * sin(phase)
             }
         }
-        let signal = [Float](repeating: 0, count: rate / 2) + tone(1.2) + [Float](repeating: 0, count: rate * 7 / 10)
-            + tone(0.8) + [Float](repeating: 0, count: rate * 7 / 10) + tone(13) + [Float](repeating: 0, count: rate * 35 / 100)
-            + tone(1) + [Float](repeating: 0, count: rate)
+        func silence(_ seconds: Double) -> [Float] {
+            [Float](repeating: 0, count: Int(seconds * Double(rate)))
+        }
+        // Pauses long enough to end a sentence, and a short one that only splits after the soft maximum.
+        var signal: [Float] = silence(0.5)
+        signal += tone(1.2)
+        signal += silence(0.7)
+        signal += tone(0.8)
+        signal += silence(0.7)
+        signal += tone(13)
+        signal += silence(0.35)
+        signal += tone(1)
+        signal += silence(1)
         let segmenter = SpeechSegmenter()
         var cursor = UtteranceCursor()
         var timeline = AudioTimeline()

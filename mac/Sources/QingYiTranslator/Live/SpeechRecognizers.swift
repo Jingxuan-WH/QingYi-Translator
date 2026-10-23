@@ -588,6 +588,7 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
 /// buffer holds exactly the frames it was given. AVAudioConverter, needed only for another sample rate, holds frames
 /// back between calls (4800 in gave 4096 out, then 640 in gave 704 out), so its buffers are timed by the frames it
 /// actually produced and it is drained at the end of each utterance. Used from the audio pipeline's queue only.
+@available(macOS 26.0, *)
 final class AnalyzerInputBuilder {
     private let format: AVAudioFormat
     private let name: String
