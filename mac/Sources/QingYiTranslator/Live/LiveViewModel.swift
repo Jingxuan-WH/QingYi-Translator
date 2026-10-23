@@ -230,6 +230,12 @@ final class LiveViewModel: ObservableObject {
             guard let self, let session, self.session === session else { return }
             showBanner(.error) { message }
         }
+        session.onRecognizerStopped = { [weak self, weak session] message in
+            guard let self, let session, self.session === session else { return }
+            Log.error("实时转录：语音识别停止，结束这次聆听")
+            stop() // don't keep showing "Listening" when nothing is recognized any more
+            showBanner(.error) { message }
+        }
         session.onMicrophoneSilent = { [weak self, weak session] in
             guard let self, let session, self.session === session, state == .running, banner == nil else { return }
             Log.info("实时转录：麦克风一直没有声音")

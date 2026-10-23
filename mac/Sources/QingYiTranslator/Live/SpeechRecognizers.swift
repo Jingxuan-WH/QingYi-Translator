@@ -10,6 +10,8 @@ protocol UtteranceRecognizer: AnyObject {
     var onPartial: ((Int, String) -> Void)? { get set }
     /// Exactly once per utterance that was ended; the text may be empty. The confidence is 0–1 when known.
     var onFinal: ((Int, String, Double?) -> Void)? { get set }
+    /// Recognition ran into an error; the message is for the user. True when the recognizer stopped for good.
+    var onFailure: ((String, Bool) -> Void)? { get set }
     /// - Parameter sample: Position in the 16 kHz stream (the time base of `SpeechSegmenter`).
     func begin(_ utterance: Int, at sample: Int64)
     func append(_ samples: [Float], at sample: Int64)
@@ -123,6 +125,7 @@ final class SystemSpeechRecognizer: UtteranceRecognizer {
     let language: Language
     var onPartial: ((Int, String) -> Void)?
     var onFinal: ((Int, String, Double?) -> Void)?
+    var onFailure: ((String, Bool) -> Void)? // each utterance is its own request, so an error only ends that one
 
     private let recognizer: SFSpeechRecognizer
     private var current: Utterance?   // audio pipeline queue only
@@ -217,16 +220,27 @@ final class SystemSpeechRecognizer: UtteranceRecognizer {
 #if compiler(>=6.2)
 /// One long-running SpeechAnalyzer per language, fed only the utterances. At each pause the analyzer is asked to
 /// finalize up to that point, so the sentence's final text arrives right away; its phrases are collected per utterance.
+/// If the analyzer stops with an error, it is set up again (up to a few times) and the user is told.
 @available(macOS 26.0, *)
-final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable { // utterance state is main-thread only
+final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable { // state is guarded as marked
+    private static let maxFailures = 3
+
     let language: Language
     var onPartial: ((Int, String) -> Void)?
     var onFinal: ((Int, String, Double?) -> Void)?
+    var onFailure: ((String, Bool) -> Void)?
 
-    private let analyzer: SpeechAnalyzer
-    private let input: AsyncStream<AnalyzerInput>.Continuation
-    private let converter: FormatConverter
+    private let speechLocale: Locale
+    private let format: AVAudioFormat
+    private let builder: AnalyzerInputBuilder  // audio pipeline queue only
+    private let lock = NSLock()
+    // Guarded by `lock`; replaced when the analyzer is set up again after an error.
+    private var analyzer: SpeechAnalyzer
+    private var input: AsyncStream<AnalyzerInput>.Continuation
     private var resultsTask: Task<Void, Never>?
+    private var generation = 0
+    private var failures = 0
+    private var isShutDown = false
     private var utterances: [Utterance] = []   // main thread only
 
     private final class Utterance {
@@ -244,21 +258,119 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         }
     }
 
-    private init(language: Language, transcriber: SpeechTranscriber, analyzer: SpeechAnalyzer, format: AVAudioFormat,
+    private init(language: Language, locale: Locale, transcriber: SpeechTranscriber, analyzer: SpeechAnalyzer, format: AVAudioFormat,
                  input: AsyncStream<AnalyzerInput>.Continuation) {
         self.language = language
+        speechLocale = locale
+        self.format = format
         self.analyzer = analyzer
         self.input = input
-        converter = FormatConverter(to: format)
-        resultsTask = Task { [weak self] in
+        builder = AnalyzerInputBuilder(format: format, name: AnalyzerSpeechRecognizer.name(locale))
+        resultsTask = watchResults(of: transcriber, generation: 0)
+    }
+
+    /// Results go to the main thread. When they stop for any reason but `shutdown()`, the analyzer has stopped working.
+    private func watchResults(of transcriber: SpeechTranscriber, generation: Int) -> Task<Void, Never> {
+        Task { [weak self] in
+            var failure: Error?
             do {
                 for try await result in transcriber.results {
                     DispatchQueue.main.async { self?.handle(result) }
                 }
             } catch {
-                Log.error("SpeechAnalyzer 识别出错", error)
+                failure = error
             }
+            self?.resultsEnded(generation: generation, error: failure)
         }
+    }
+
+    private func resultsEnded(generation: Int, error: Error?) {
+        guard let failures = countFailure(generation: generation) else { return } // shut down, or an older analyzer
+        let name = AnalyzerSpeechRecognizer.name(speechLocale)
+        Log.error("SpeechAnalyzer 停止工作（\(name)，第 \(failures) 次）\(error == nil ? "：识别结果意外结束" : "")", error)
+        let detail = error?.localizedDescription ?? L("识别结果意外结束", "its results ended unexpectedly")
+        DispatchQueue.main.async { [weak self] in self?.deliverAll() } // the sentences in progress won't get more text
+        guard failures <= AnalyzerSpeechRecognizer.maxFailures else {
+            report(L("\(language.localName)的语音识别接连出错，已经停止（\(detail)）。请点“开始”重新开始；详细信息已写入日志。",
+                     "Speech recognition for \(language.localName) failed repeatedly and has stopped (\(detail)). Click Start to begin again; details were written to the log."),
+                   stopped: true)
+            return
+        }
+        Task { [weak self] in await self?.restart(after: detail) }
+    }
+
+    private func restart(after detail: String) async {
+        let name = AnalyzerSpeechRecognizer.name(speechLocale)
+        do {
+            let module = AnalyzerSpeechRecognizer.transcriber(for: speechLocale)
+            let analyzer = SpeechAnalyzer(modules: [module], options: nil)
+            try await analyzer.prepareToAnalyze(in: format)
+            let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+            try await analyzer.start(inputSequence: stream)
+            guard let old = replace(analyzer: analyzer, input: continuation, transcriber: module) else {
+                continuation.finish()
+                await analyzer.cancelAndFinishNow()
+                return
+            }
+            old.input.finish()
+            await old.analyzer.cancelAndFinishNow()
+            Log.info("SpeechAnalyzer 已重新启动：\(name)")
+            report(L("\(language.localName)的语音识别出错了（\(detail)），已经自动重新启动，正在说的那句话可能不完整。",
+                     "Speech recognition for \(language.localName) ran into an error (\(detail)) and was restarted; the sentence being spoken may be incomplete."),
+                   stopped: false)
+        } catch {
+            Log.error("SpeechAnalyzer 无法重新启动（\(name)）", error)
+            report(L("\(language.localName)的语音识别出错了（\(detail)），重新启动也失败了。请点“开始”重新开始；详细信息已写入日志。",
+                     "Speech recognition for \(language.localName) ran into an error (\(detail)) and couldn’t be restarted. Click Start to begin again; details were written to the log."),
+                   stopped: true)
+        }
+    }
+
+    private func report(_ message: String, stopped: Bool) {
+        DispatchQueue.main.async { [weak self] in self?.onFailure?(message, stopped) }
+    }
+
+    // ---------------- state guarded by the lock ----------------
+
+    /// Counts a failure of the current analyzer; nil when it doesn't count (shut down, or an analyzer already replaced).
+    private func countFailure(generation: Int) -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isShutDown, generation == self.generation else { return nil }
+        failures += 1
+        return failures
+    }
+
+    private func replace(analyzer: SpeechAnalyzer, input: AsyncStream<AnalyzerInput>.Continuation,
+                         transcriber: SpeechTranscriber) -> (analyzer: SpeechAnalyzer, input: AsyncStream<AnalyzerInput>.Continuation)? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isShutDown else { return nil }
+        let old = (self.analyzer, self.input)
+        self.analyzer = analyzer
+        self.input = input
+        generation += 1
+        resultsTask = watchResults(of: transcriber, generation: generation)
+        return old
+    }
+
+    private func current() -> (analyzer: SpeechAnalyzer, input: AsyncStream<AnalyzerInput>.Continuation) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (analyzer, input)
+    }
+
+    private func resetFailures() {
+        lock.lock()
+        defer { lock.unlock() }
+        failures = 0
+    }
+
+    private func markShutDown() -> (analyzer: SpeechAnalyzer, input: AsyncStream<AnalyzerInput>.Continuation, task: Task<Void, Never>?) {
+        lock.lock()
+        defer { lock.unlock() }
+        isShutDown = true
+        return (analyzer, input, resultsTask)
     }
 
     private static func transcriber(for locale: Locale) -> SpeechTranscriber {
@@ -298,7 +410,8 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         try await analyzer.start(inputSequence: stream)
         Log.info("SpeechAnalyzer 已启动：\(name(speechLocale))，\(format)")
-        return AnalyzerSpeechRecognizer(language: language, transcriber: module, analyzer: analyzer, format: format, input: continuation)
+        return AnalyzerSpeechRecognizer(language: language, locale: speechLocale, transcriber: module, analyzer: analyzer, format: format,
+                                        input: continuation)
     }
 
     static func download(language: Language, keeping: [Language], progress: @escaping (Double) -> Void) async throws {
@@ -374,19 +487,24 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
     }
 
     func append(_ samples: [Float], at sample: Int64) {
-        guard let source = MonoResampler.buffer(samples), let buffer = converter.convert(source) else { return }
-        input.yield(AnalyzerInput(buffer: buffer, bufferStartTime: CMTime(value: sample, timescale: 16000)))
+        let inputs = builder.inputs(samples, at: sample)
+        guard !inputs.isEmpty else { return }
+        let input = current().input
+        inputs.forEach { input.yield($0) }
     }
 
     func end(_ utterance: Int, at sample: Int64) {
-        let end = Double(sample) / 16000
+        let rest = builder.finish()
+        let (analyzer, input) = current()
+        rest.forEach { input.yield($0) }
+        let through = builder.end ?? CMTime(value: sample, timescale: 16000)
+        let end = through.seconds
         DispatchQueue.main.async { [weak self] in
             self?.utterances.first { $0.id == utterance }?.end = end
         }
-        let analyzer = self.analyzer
         Task { [weak self] in
             do {
-                try await analyzer.finalize(through: CMTime(value: sample, timescale: 16000))
+                try await analyzer.finalize(through: through)
             } catch {
                 Log.error("SpeechAnalyzer 无法结束这句话", error)
             }
@@ -402,9 +520,9 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
     }
 
     func shutdown() {
+        let (analyzer, input, task) = markShutDown()
         input.finish()
-        resultsTask?.cancel()
-        let analyzer = self.analyzer
+        task?.cancel()
         Task { await analyzer.cancelAndFinishNow() }
     }
 
@@ -415,6 +533,7 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         guard let utterance = utterances.last(where: { !$0.delivered && $0.start <= time + 0.05 }) ?? utterances.first(where: { !$0.delivered }) else { return }
         let text = String(result.text.characters)
         if result.isFinal {
+            resetFailures() // working again
             utterance.text = join(utterance.text, text)
             utterance.volatile = ""
             for run in result.text.runs {
@@ -433,6 +552,12 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
         } else {
             utterance.volatile = text
             onPartial?(utterance.id, join(utterance.text, text))
+        }
+    }
+
+    private func deliverAll() {
+        for id in utterances.filter({ !$0.delivered }).map(\.id) {
+            deliver(id)
         }
     }
 
@@ -458,37 +583,129 @@ final class AnalyzerSpeechRecognizer: UtteranceRecognizer, @unchecked Sendable {
     }
 }
 
-/// Converts 16 kHz mono buffers to the format a SpeechAnalyzer asked for.
-final class FormatConverter {
+/// Turns the 16 kHz mono samples of each utterance into inputs for a SpeechAnalyzer: in the format it asked for, on one
+/// timeline that never goes back. The usual formats (16 kHz mono, 16-bit or float) are filled sample by sample, so a
+/// buffer holds exactly the frames it was given. AVAudioConverter, needed only for another sample rate, holds frames
+/// back between calls (4800 in gave 4096 out, then 640 in gave 704 out), so its buffers are timed by the frames it
+/// actually produced and it is drained at the end of each utterance. Used from the audio pipeline's queue only.
+final class AnalyzerInputBuilder {
     private let format: AVAudioFormat
+    private let name: String
+    private let direct: Bool
     private var converter: AVAudioConverter?
+    private var converterNext: Int64?   // where the converter's next output starts, in the analyzer's frames
+    private var timeline = AudioTimeline()
 
-    init(to format: AVAudioFormat) {
+    init(format: AVAudioFormat, name: String) {
         self.format = format
+        self.name = name
+        direct = format.sampleRate == 16000 && format.channelCount == 1
+            && (format.commonFormat == .pcmFormatInt16 || format.commonFormat == .pcmFormatFloat32)
     }
 
-    func convert(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        if buffer.format == format {
-            return buffer
+    /// The end of the audio handed over so far.
+    var end: CMTime? {
+        timeline.end.map { CMTime(value: $0, timescale: CMTimeScale(format.sampleRate)) }
+    }
+
+    /// - Parameter sample: Where `samples` start on the 16 kHz timeline.
+    func inputs(_ samples: [Float], at sample: Int64) -> [AnalyzerInput] {
+        guard !samples.isEmpty else { return [] }
+        if direct {
+            let (drop, start) = place(start: sample, count: samples.count)
+            guard drop < samples.count, let buffer = makeBuffer(samples[drop...]) else { return [] }
+            return [input(buffer, at: start)]
         }
+        guard let source = MonoResampler.buffer(samples) else { return [] }
+        let start = converterNext ?? Int64((Double(sample) * format.sampleRate / 16000).rounded())
+        converterNext = start
+        guard let output = convert(source) else { return [] }
+        converterNext = start + Int64(output.frameLength)
+        return placed(output, at: start)
+    }
+
+    /// The end of an utterance: drains the converter, so nothing it held back slips into the next utterance.
+    func finish() -> [AnalyzerInput] {
+        guard !direct, let start = converterNext else { return [] }
+        defer {
+            converter?.reset()
+            converterNext = nil
+        }
+        guard let output = convert(nil) else { return [] }
+        return placed(output, at: start)
+    }
+
+    private func placed(_ buffer: AVAudioPCMBuffer, at start: Int64) -> [AnalyzerInput] {
+        let count = Int(buffer.frameLength)
+        let (drop, placedStart) = place(start: start, count: count)
+        guard drop < count, let kept = drop == 0 ? buffer : slice(buffer, from: drop) else { return [] }
+        return [input(kept, at: placedStart)]
+    }
+
+    private func place(start: Int64, count: Int) -> (drop: Int, start: Int64) {
+        let placed = timeline.place(start: start, count: count)
+        if placed.drop > 0 {
+            Log.info("SpeechAnalyzer（\(name)）：音频与上一块重叠，丢掉开头的 \(placed.drop) / \(count) 帧")
+        }
+        return placed
+    }
+
+    private func input(_ buffer: AVAudioPCMBuffer, at start: Int64) -> AnalyzerInput {
+        AnalyzerInput(buffer: buffer, bufferStartTime: CMTime(value: start, timescale: CMTimeScale(format.sampleRate)))
+    }
+
+    private func makeBuffer(_ samples: ArraySlice<Float>) -> AVAudioPCMBuffer? {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else { return nil }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        if format.commonFormat == .pcmFormatInt16 {
+            guard let data = buffer.int16ChannelData else { return nil }
+            let converted = AudioSamples.int16(Array(samples))
+            converted.withUnsafeBufferPointer { data[0].update(from: $0.baseAddress!, count: converted.count) }
+        } else {
+            guard let data = buffer.floatChannelData else { return nil }
+            samples.withUnsafeBufferPointer { data[0].update(from: $0.baseAddress!, count: samples.count) }
+        }
+        return buffer
+    }
+
+    /// Converts `source`, or with nil drains what the converter still holds.
+    private func convert(_ source: AVAudioPCMBuffer?) -> AVAudioPCMBuffer? {
         if converter == nil {
-            converter = AVAudioConverter(from: buffer.format, to: format)
+            converter = AVAudioConverter(from: MonoResampler.format, to: format)
         }
         guard let converter else { return nil }
-        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * format.sampleRate / buffer.format.sampleRate) + 64
+        let capacity = AVAudioFrameCount(Double(source?.frameLength ?? 0) * format.sampleRate / 16000) + 4096
         guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return nil }
         var consumed = false
         var error: NSError?
         let status = converter.convert(to: output, error: &error) { _, inputStatus in
-            if consumed {
-                inputStatus.pointee = .noDataNow
-                return nil
+            if let source, !consumed {
+                consumed = true
+                inputStatus.pointee = .haveData
+                return source
             }
-            consumed = true
-            inputStatus.pointee = .haveData
-            return buffer
+            inputStatus.pointee = source == nil ? .endOfStream : .noDataNow
+            return nil
         }
-        return status == .error || output.frameLength == 0 ? nil : output
+        if status == .error {
+            Log.error("SpeechAnalyzer（\(name)）：音频格式转换失败", error)
+            return nil
+        }
+        return output.frameLength == 0 ? nil : output
+    }
+
+    private func slice(_ buffer: AVAudioPCMBuffer, from offset: Int) -> AVAudioPCMBuffer? {
+        let count = Int(buffer.frameLength) - offset
+        guard count > 0, let result = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: AVAudioFrameCount(count)) else { return nil }
+        result.frameLength = AVAudioFrameCount(count)
+        let bytesPerFrame = Int(buffer.format.streamDescription.pointee.mBytesPerFrame)
+        let sources = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        let targets = UnsafeMutableAudioBufferListPointer(result.mutableAudioBufferList)
+        for (source, target) in zip(sources, targets) {
+            guard let from = source.mData, let to = target.mData else { return nil }
+            to.copyMemory(from: from + offset * bytesPerFrame, byteCount: count * bytesPerFrame)
+        }
+        return result
     }
 }
 #endif

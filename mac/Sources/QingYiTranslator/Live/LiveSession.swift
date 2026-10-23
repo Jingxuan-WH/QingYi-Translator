@@ -13,6 +13,8 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
     /// Recent loudness of the microphone and the system audio, 0–1.
     var onLevels: ((Float, Float) -> Void)?
     var onFailure: ((String) -> Void)?
+    /// A recognizer stopped for good; the session can't go on.
+    var onRecognizerStopped: ((String) -> Void)?
     /// Another app is playing sound but the system audio stays silent: most likely the permission is missing.
     var onSystemAudioSilent: (() -> Void)?
     /// The microphone has delivered only silence since listening started.
@@ -24,7 +26,7 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
     private var sources: [LiveAudioSource] = []
     private var mixer: AudioMixer?
     private var timer: DispatchSourceTimer?
-    private var cursor: Int64 = 0
+    private var cursor = UtteranceCursor()
     private var levels: [Float] = [0, 0]
     private var lastLevelReport: Int64 = 0
     private var systemAudioStarted: Int64?
@@ -59,6 +61,13 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
                 pending[utterance]?.candidates.append(RecognitionCandidate(language: recognizer.language, text: LiveSession.tidy(text, recognizer.language),
                                                                            confidence: confidence))
                 completeIfReady(utterance)
+            }
+            recognizer.onFailure = { [weak self] message, stopped in
+                if stopped {
+                    self?.onRecognizerStopped?(message)
+                } else {
+                    self?.onFailure?(message)
+                }
             }
         }
     }
@@ -190,15 +199,15 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
         for event in events {
             switch event {
             case let .started(utterance, sample):
-                cursor = sample
+                cursor.started(at: sample)
                 let start = Double(sample) / Double(LiveSession.rate)
                 DispatchQueue.main.async { [weak self] in
                     self?.pending[utterance] = Pending(start: start, end: start)
                 }
                 recognizers.forEach { $0.begin(utterance, at: sample) }
             case let .audio(_, samples):
-                recognizers.forEach { $0.append(samples, at: cursor) }
-                cursor += Int64(samples.count)
+                let start = cursor.audio(samples.count)
+                recognizers.forEach { $0.append(samples, at: start) }
             case let .ended(utterance, sample):
                 let end = Double(sample) / Double(LiveSession.rate)
                 DispatchQueue.main.async { [weak self] in
@@ -206,7 +215,7 @@ final class LiveSession: @unchecked Sendable { // state is confined to `queue` o
                     self?.pending[utterance]?.ended = true
                     self?.completeIfReady(utterance)
                 }
-                recognizers.forEach { $0.end(utterance, at: cursor) }
+                recognizers.forEach { $0.end(utterance, at: cursor.position) }
             case let .discarded(utterance, _):
                 recognizers.forEach { $0.cancel(utterance) }
                 DispatchQueue.main.async { [weak self] in
