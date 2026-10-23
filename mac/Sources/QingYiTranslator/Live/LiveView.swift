@@ -75,8 +75,11 @@ struct LiveView: View {
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(model.state == .idle)
                     .opacity(model.state == .idle ? 0.5 : 1)
+                if model.state == .preparing || model.state == .downloading {
+                    ProgressView().controlSize(.small).padding(.leading, 8)
+                }
                 Text(model.statusText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1).truncationMode(.tail)
-                    .padding(.leading, 8)
+                    .padding(.leading, model.state == .preparing || model.state == .downloading ? 0 : 8)
                 Spacer(minLength: 8)
                 if model.usesMicrophone {
                     LevelMeter(symbol: "mic", level: model.micLevel).help(L("麦克风音量", "Microphone level"))
