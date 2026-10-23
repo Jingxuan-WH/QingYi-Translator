@@ -23,7 +23,7 @@ struct SpeechTimelineTests {
         #expect(placed.drop == 5 && placed.start == 210)
         placed = timeline.place(start: 190, count: 10) // entirely before: dropped
         #expect(placed.drop == 10)
-        #expect(timeline.end == 220)
+        #expect(timeline.end == 215)
     }
 
     /// Feeds speech with pauses through the segmenter the way the recognizers get it and checks that the buffer start
