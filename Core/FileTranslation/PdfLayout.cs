@@ -36,7 +36,16 @@ public sealed class PdfLine
 
     /// <summary>Shares its row with other text on the same side of the column gap: a table cell, a label, an equation number.</summary>
     public bool Tabular { get; set; }
+
+    /// <summary>A line of a display formula; it is left as it is and never joins a paragraph.</summary>
+    public bool Formula { get; set; }
 }
+
+/// <summary>One character of an inline formula or sub/superscript: its offset from the object's left end and the line's baseline.</summary>
+public readonly record struct PdfAtomGlyph(string Text, double Dx, double Dy, double FontSize, string FontName);
+
+/// <summary>An inline formula or a sub/superscript as it was drawn, so the translation can draw it the same way.</summary>
+public sealed record PdfAtom(double Width, IReadOnlyList<PdfAtomGlyph> Glyphs);
 
 /// <summary>A paragraph (or heading, caption, table cell…) found on a page.</summary>
 public sealed class PdfBlock
@@ -67,8 +76,14 @@ public sealed class PdfBlock
     public bool Justified { get; set; }
     public bool IsFormula { get; set; }
 
-    /// <summary>The text with inline formulas as objects; their text is kept for drawing.</summary>
+    /// <summary>
+    /// The text with inline formulas and sub/superscripts as objects (their text is kept). Text pieces have a style:
+    /// 1 when bold, 2 when italic, 3 when both, otherwise 0.
+    /// </summary>
     public List<InlinePiece> Pieces { get; set; } = [];
+
+    /// <summary>The objects among <see cref="Pieces"/>, by object number, with their characters' positions.</summary>
+    public Dictionary<int, PdfAtom> Atoms { get; } = [];
     public string Text => string.Concat(Pieces.Select(p => p.Text));
     public string WordsText => string.Concat(Pieces.Where(p => !p.IsAtom).Select(p => p.Text));
 
@@ -97,6 +112,8 @@ public static class PdfLayout
         ["times", "serif", "roman", "minion", "garamond", "georgia", "cambria", "palatino", "book", "cmr", "lmroman", "nimbusrom", "termes", "pagella", "song", "ming", "mincho", "kai", "fang", "batang", "charter", "century", "baskerville", "utopia", "stixtwo", "libertine", "sabon", "caslon", "bodoni", "simsun", "stsong", "fzss"];
 
     private const string Bullets = "•·▪▫◦●○■□♦◆➢➤►▶✓✔-–—*";
+    private const string Relations = "=<>≤≥≈≠≡∝≪≫→←⇒⇔↔∈∉⊂⊆";
+    private const string Operators = "+−×÷·±∓/^*";
 
     public static bool IsBoldFont(string name)
     {
@@ -162,6 +179,12 @@ public static class PdfLayout
                 foreach (var line in row)
                     line.Tabular = true;
             }
+            // Display formulas, with or without an equation number such as "(1)" further right on their row.
+            var numbers = row.Where(IsEquationNumber).ToList();
+            foreach (var line in row.Except(numbers))
+                line.Formula = LooksLikeFormula(line, numbered: numbers.Any(number => number.X0 > line.X1));
+            foreach (var number in numbers)
+                number.Formula = row.Any(line => line.Formula && line.X1 < number.X0);
         }
         var blocks = BuildBlocks(segments);
         foreach (var block in blocks)
@@ -329,6 +352,64 @@ public static class PdfLayout
         return [new PdfLine(left) { FontSize = line.FontSize, Bold = line.Bold, Row = line.Row }, new PdfLine(right) { FontSize = line.FontSize, Bold = line.Bold, Row = line.Row }];
     }
 
+    /// <summary>"(1)", "(2a)", "(3.12)", "(A.1)": the number of a display formula.</summary>
+    private static bool IsEquationNumber(PdfLine line)
+    {
+        string text = string.Concat(line.Glyphs.OrderBy(g => g.X0).Select(g => g.Text));
+        return System.Text.RegularExpressions.Regex.IsMatch(text, @"^\((?:[A-Z]\.?)?\d{1,3}(?:[.\-]\d{1,3})*[a-z]?\)$");
+    }
+
+    /// <summary>
+    /// A line of a display formula: a relation sign with symbols, sub/superscripts or operators around it and
+    /// (next to) no ordinary words, or anything mathematical in front of an equation number.
+    /// </summary>
+    private static bool LooksLikeFormula(PdfLine line, bool numbered)
+    {
+        var glyphs = line.Glyphs.OrderBy(g => g.X0).ToList();
+        var text = glyphs.Where(g => !IsMathGlyph(g)).ToList();
+        // The full size: sub/superscripts may outnumber the characters they belong to.
+        double size = (text.Count > 0 ? text : glyphs).Max(g => g.FontSize);
+        int math = glyphs.Count(IsMathGlyph);
+        int relations = glyphs.Count(g => g.Text.Any(Relations.Contains));
+        int operators = glyphs.Count(g => g.Text.Any(Operators.Contains));
+        int scripts = 0, words = 0, letters = 0;
+        bool inScript = false;
+        for (int i = 0; i <= glyphs.Count; i++)
+        {
+            bool plainLetter = false;
+            if (i < glyphs.Count)
+            {
+                var glyph = glyphs[i];
+                bool small = glyph.FontSize < 0.85 * size;
+                if (small && !inScript)
+                    scripts++;
+                inScript = small;
+                plainLetter = !small && !IsMathGlyph(glyph) && glyph.Text.All(char.IsLetter);
+                if (plainLetter && letters > 0 && glyph.X0 - glyphs[i - 1].X1 > 0.15 * size)
+                {
+                    words += letters >= 4 ? 1 : 0;
+                    letters = 0;
+                }
+            }
+            // Ordinary words: four or more full-size letters in a row (variables are single letters, functions short).
+            if (!plainLetter)
+            {
+                words += letters >= 4 ? 1 : 0;
+                letters = 0;
+            }
+            else
+            {
+                letters += glyphs[i].Text.Length;
+            }
+        }
+        if (words >= 3)
+            return false;
+        int symbols = math + scripts + operators;
+        if (numbered)
+            return relations + symbols >= 1;
+        return relations >= 1 && (symbols >= 2 && words == 0 || symbols >= 4 && words <= 1);
+    }
+
     private static bool StartsWithBullet(PdfLine line)
     {
         string text = string.Concat(line.Glyphs.Take(4).Select(g => g.Text));
@@ -364,7 +445,8 @@ public static class PdfLayout
                 if (Math.Abs(line.FontSize - block.FontSize) > 0.1 * block.FontSize || line.Bold != block.Bold)
                     continue;
                 // Table cells and labels sit next to other text on the same row; they don't continue each other.
-                if (line.Tabular || last.Tabular)
+                // Nor do formulas and the text around them.
+                if (line.Tabular || last.Tabular || line.Formula != last.Formula)
                     continue;
                 double overlap = Math.Min(block.X1, line.X1) - Math.Max(block.X0, line.X0);
                 if (overlap < 0.5 * Math.Min(block.X1 - block.X0, line.X1 - line.X0))
@@ -397,7 +479,7 @@ public static class PdfLayout
         var glyphs = block.Lines.SelectMany(line => line.Glyphs).ToList();
         int math = glyphs.Count(IsMathGlyph);
         int letters = glyphs.Count(g => !IsMathGlyph(g) && g.Text.Any(char.IsLetter));
-        block.IsFormula = math >= 0.4 * glyphs.Count || math > 0 && letters <= 3;
+        block.IsFormula = block.Lines.All(line => line.Formula) || math >= 0.4 * glyphs.Count || math > 0 && letters <= 3;
         var textGlyphs = glyphs.Where(g => !IsMathGlyph(g)).DefaultIfEmpty(glyphs[0]).ToList();
         block.FontSize = Median(textGlyphs.Select(g => g.FontSize));
         block.Bold = textGlyphs.Count(g => g.IsBold) * 2 > textGlyphs.Count;
@@ -429,41 +511,67 @@ public static class PdfLayout
             block.Centered = Math.Abs((x0 + x1) / 2 - pageWidth / 2) < pageWidth * 0.03 && width < pageWidth * 0.7;
         }
 
-        block.Pieces = BuildPieces(lines);
+        block.Pieces = BuildPieces(lines, block.Atoms);
     }
 
-    /// <summary>The block's text: spaces where the gap between characters is wide, hyphenation at line ends undone, formulas as objects.</summary>
-    private static List<InlinePiece> BuildPieces(IReadOnlyList<PdfLine> lines)
+    /// <summary>
+    /// The block's text: spaces where the gap between characters is wide, hyphenation at line ends undone, bold and
+    /// italic text as styles, and inline formulas and sub/superscripts as objects that keep their characters' positions.
+    /// </summary>
+    private static List<InlinePiece> BuildPieces(IReadOnlyList<PdfLine> lines, Dictionary<int, PdfAtom> atoms)
     {
         var pieces = new List<InlinePiece>();
         var text = new StringBuilder();
-        var formula = new StringBuilder();
-        int atoms = 0;
+        int style = 0;
+        var word = new List<PdfGlyph>(); // the characters of the word at the end of text
+        var formula = new List<PdfGlyph>();
+        var formulaText = new StringBuilder();
+        double baseline = 0;
         char last = '\0';
 
         void FlushText()
         {
             if (text.Length > 0)
-                pieces.Add(InlinePiece.Of(text.ToString(), 0));
+                pieces.Add(InlinePiece.Of(text.ToString(), style));
             text.Clear();
+            word.Clear();
         }
 
         void FlushFormula()
         {
-            if (formula.Length == 0)
+            if (formula.Count == 0)
                 return;
             FlushText();
-            string value = formula.ToString();
-            pieces.Add(InlinePiece.Object(atoms++, value.Trim()));
+            double x0 = formula[0].X0;
+            int atom = atoms.Count;
+            atoms[atom] = new PdfAtom(formula.Max(g => g.X1) - x0,
+                formula.Select(g => new PdfAtomGlyph(g.Text, g.X0 - x0, g.Y0 + 0.25 * g.FontSize - baseline, g.FontSize, g.FontName)).ToList());
+            string value = formulaText.ToString();
+            pieces.Add(InlinePiece.Object(atom, value.Trim()));
             formula.Clear();
+            formulaText.Clear();
             if (value.EndsWith(' '))
                 text.Append(' ');
         }
 
+        void StartFormula(bool takeWord)
+        {
+            // A subscript or superscript takes the short word it is attached to: V + cell, x + 2.
+            var taken = takeWord && word.Count is > 0 and <= 2 ? word.ToList() : [];
+            text.Length -= taken.Sum(g => g.Text.Length);
+            FlushText();
+            foreach (var glyph in taken)
+            {
+                formula.Add(glyph);
+                formulaText.Append(glyph.Text);
+            }
+        }
+
         void Space()
         {
-            if (formula.Length > 0)
-                formula.Append(' ');
+            word.Clear();
+            if (formula.Count > 0)
+                formulaText.Append(' ');
             else if (text.Length > 0 && text[^1] != ' ')
                 text.Append(' ');
             else if (text.Length == 0 && pieces.Count > 0)
@@ -476,13 +584,18 @@ public static class PdfLayout
             double size = lines[l].FontSize;
             if (l > 0)
             {
+                // An inline formula ends with its line, so its characters keep their places relative to each other.
+                FlushFormula();
                 char first = glyphs[0].Text[0];
                 // "trans-" + "lation" → "translation"; CJK lines join without a space.
                 if (last == '-' && char.IsLower(first) && text.Length > 1 && char.IsLetter(text[^2]))
                     text.Length--;
                 else if (!(IsCjk(last) && IsCjk(first)))
                     Space();
+                word.Clear();
             }
+            baseline = Median(glyphs.Where(g => Math.Abs(g.FontSize - size) <= 0.1 * size).Select(g => g.Y0 + 0.25 * g.FontSize)
+                .DefaultIfEmpty(glyphs[0].Y0 + 0.25 * glyphs[0].FontSize));
             for (int i = 0; i < glyphs.Count; i++)
             {
                 var glyph = glyphs[i];
@@ -492,24 +605,34 @@ public static class PdfLayout
                     if (gap > 0.15 * size && !(IsCjk(glyphs[i - 1].Text[^1]) && IsCjk(glyph.Text[0])))
                         Space();
                 }
-                if (IsMathGlyph(glyph))
+                bool math = IsMathGlyph(glyph);
+                bool script = glyph.FontSize < 0.85 * size && !IsCjk(glyph.Text[0]);
+                if (math || script)
                 {
-                    if (formula.Length == 0)
-                        FlushText();
-                    formula.Append(glyph.Text);
+                    if (formula.Count == 0)
+                        StartFormula(takeWord: script && !math);
+                    formula.Add(glyph);
+                    formulaText.Append(glyph.Text);
+                }
+                else if (formula.Count > 0 && glyph.Text.All(c => !char.IsLetter(c)) && glyph.Text != "," && glyph.Text != ".")
+                {
+                    // Plain digits and symbols right after a formula symbol (x², f(x) = …) keep the formula together.
+                    formula.Add(glyph);
+                    formulaText.Append(glyph.Text);
                 }
                 else
                 {
-                    // Plain letters and digits right after a formula symbol (x², f(x) = …) keep the formula together.
-                    if (formula.Length > 0 && (glyph.Text.All(c => !char.IsLetter(c)) && glyph.Text != "," && glyph.Text != "." || text.Length == 0 && glyph.FontSize < size * 0.85))
+                    FlushFormula();
+                    int glyphStyle = (glyph.IsBold ? 1 : 0) | (IsItalicFont(glyph.FontName) ? 2 : 0);
+                    if (glyphStyle != style)
                     {
-                        formula.Append(glyph.Text);
+                        // A space left over from before takes the new style rather than becoming a piece of its own.
+                        if (text.ToString().Trim().Length > 0)
+                            FlushText();
+                        style = glyphStyle;
                     }
-                    else
-                    {
-                        FlushFormula();
-                        text.Append(glyph.Text);
-                    }
+                    text.Append(glyph.Text);
+                    word.Add(glyph);
                 }
                 last = glyph.Text[^1];
             }
@@ -517,7 +640,7 @@ public static class PdfLayout
         FlushFormula();
         FlushText();
         if (pieces.Count > 0 && !pieces[^1].IsAtom)
-            pieces[^1] = InlinePiece.Of(pieces[^1].Text.TrimEnd(), 0);
+            pieces[^1] = InlinePiece.Of(pieces[^1].Text.TrimEnd(), pieces[^1].Style);
         return pieces;
     }
 

@@ -125,6 +125,81 @@ public class PdfLayoutTests
         Assert.Equal([InlinePiece.Of("where ", 0), InlinePiece.Object(0, "α"), InlinePiece.Of(" is the angle", 0)], block.Pieces);
     }
 
+    /// <summary>"V_cell = E_Nernst − η_act − η_ohm − η_conc   (1)" as a typesetter draws it: italic letters, smaller and lower subscripts.</summary>
+    private static List<PdfGlyph> FormulaLine(double baseline, bool numbered)
+    {
+        var glyphs = new List<PdfGlyph>();
+        double x = 200;
+        void Put(string text, double size = 10, string font = "Times-Italic", double dy = 0)
+        {
+            glyphs.AddRange(Glyphs.Line(text, x, baseline + dy, size, font));
+            x += Glyphs.Width(text, size);
+        }
+        Put("V");
+        Put("cell", 7, "Times-Roman", -2.5);
+        Put(" = ", font: "Times-Roman");
+        Put("E");
+        Put("Nernst", 7, "Times-Roman", -2.5);
+        foreach (string loss in new[] { "act", "ohm", "conc" })
+        {
+            Put(" − ", font: "Times-Roman");
+            Put("η");
+            Put(loss, 7, "Times-Roman", -2.5);
+        }
+        if (numbered)
+            glyphs.AddRange(Glyphs.Line("(1)", 520, baseline));
+        return glyphs;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DisplayFormulasAreLeftAloneWithOrWithoutANumber(bool numbered)
+    {
+        // Close below and above paragraph lines: the formula must not join them.
+        var glyphs = Glyphs.Line("The cell voltage follows from the Nernst voltage minus three losses,", 50, 700)
+            .Concat(FormulaLine(688, numbered))
+            .Concat(Glyphs.Line("where each loss grows with the current drawn from the stack.", 50, 676)).ToList();
+        var blocks = PdfLayout.Analyze(glyphs, 600, 800);
+        var formula = Assert.Single(blocks, b => b.Text.Contains('='));
+        Assert.True(formula.IsFormula);
+        Assert.Contains("Nernst", formula.Text);
+        Assert.Equal(2, blocks.Count(b => !b.IsFormula));
+        Assert.All(blocks.Where(b => !b.IsFormula), b => Assert.DoesNotContain("η", b.Text));
+    }
+
+    [Fact]
+    public void ProseWithAnEqualsSignIsNotAFormula()
+    {
+        var block = Assert.Single(PdfLayout.Analyze(Glyphs.Line("The rated power P = 5 kW is reached at noon on most sunny days.", 50, 700), 600, 800));
+        Assert.False(block.IsFormula);
+    }
+
+    [Fact]
+    public void SubscriptsBecomeObjectsThatKeepTheirPlace()
+    {
+        var glyphs = Glyphs.Line("The voltage", 50, 700).Concat(Glyphs.Line("V", 108, 700, 10, "Times-Italic"))
+            .Concat(Glyphs.Line("cell", 113, 697.5, 7)).Concat(Glyphs.Line("drops by 5%.", 130, 700)).ToList();
+        var block = Assert.Single(PdfLayout.Analyze(glyphs, 600, 800));
+        Assert.Equal([InlinePiece.Of("The voltage ", 0), InlinePiece.Object(0, "Vcell"), InlinePiece.Of(" drops by 5%.", 0)], block.Pieces);
+        var atom = block.Atoms[0];
+        Assert.Equal(["V", "c", "e", "l", "l"], atom.Glyphs.Select(g => g.Text));
+        Assert.Equal(0, atom.Glyphs[0].Dx);
+        Assert.InRange(atom.Glyphs[0].Dy, -0.5, 0.5);
+        Assert.Equal(5, atom.Glyphs[1].Dx, 3);
+        Assert.InRange(atom.Glyphs[1].Dy, -3, -2); // lower
+        Assert.Equal(7, atom.Glyphs[1].FontSize);
+        Assert.Equal(19, atom.Width, 3);
+    }
+
+    [Fact]
+    public void BoldTextGetsItsOwnStyle()
+    {
+        var glyphs = Glyphs.Line("Abstract—", 50, 700, 10, "Times-Bold").Concat(Glyphs.Line("This paper studies small grids.", 100, 700)).ToList();
+        var block = Assert.Single(PdfLayout.Analyze(glyphs, 600, 800));
+        Assert.Equal([InlinePiece.Of("Abstract— ", 1), InlinePiece.Of("This paper studies small grids.", 0)], block.Pieces);
+    }
+
     [Fact]
     public void ListItemsAndIndentedParagraphsAreSeparateBlocks()
     {
@@ -179,6 +254,18 @@ public class PdfTextFitterTests
     }
 
     [Fact]
+    public void RunsKeepTheirStyles()
+    {
+        // Style 1 is twice as wide, like a bigger font.
+        var fitted = PdfTextFitter.Fit([new TextRun("alpha ", 0), new TextRun("beta", 1), new TextRun(" gamma", 0)], 200, 20, 10, 1.2,
+            (text, style) => Glyphs.Width(text, 1) * (style == 1 ? 2 : 1), justify: false);
+        var line = Assert.Single(fitted.Lines);
+        Assert.Equal([("alpha", 0), ("beta", 1), ("gamma", 0)], line.Pieces.Select(p => (p.Text, p.Style)));
+        Assert.Equal([0, 30, 72.5], line.Pieces.Select(p => Math.Round(p.X, 3)));
+        Assert.Equal(97.5, line.Width, 3);
+    }
+
+    [Fact]
     public void JustifiedLinesFillTheWidthExceptTheLast()
     {
         var fitted = PdfTextFitter.Fit("aaaa bbbb cccc dddd eeee ffff", 70, 100, 10, 1.2, Measure, justify: true);
@@ -195,6 +282,7 @@ public class PdfDocumentTests
         // Use fonts that exist on Linux test machines; on Windows the normal lookup finds Times New Roman, Arial and the CJK fonts.
         const string liberation = "/usr/share/fonts/truetype/liberation/";
         const string chinese = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc";
+        const string dejavu = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
         if (File.Exists(liberation + "LiberationSerif-Regular.ttf"))
         {
             PdfFonts.Override = face => face switch
@@ -203,6 +291,11 @@ public class PdfDocumentTests
                 "latin-serif-bold" => liberation + "LiberationSerif-Bold.ttf",
                 "latin-sans" => liberation + "LiberationSans-Regular.ttf",
                 "latin-sans-bold" => liberation + "LiberationSans-Bold.ttf",
+                "latin-serif-italic" => liberation + "LiberationSerif-Italic.ttf",
+                "latin-serif-bold-italic" => liberation + "LiberationSerif-BoldItalic.ttf",
+                "latin-sans-italic" => liberation + "LiberationSans-Italic.ttf",
+                "latin-sans-bold-italic" => liberation + "LiberationSans-BoldItalic.ttf",
+                "math" or "symbol" when File.Exists(dejavu) => dejavu,
                 _ when face.StartsWith("zh") && File.Exists(chinese) => chinese,
                 _ => null,
             };
@@ -292,6 +385,143 @@ public class PdfDocumentTests
         Assert.Contains("小型电网的控制", text);
         Assert.Contains("独立运行", text);
         Assert.True(new FileInfo(output).Length < 2_000_000, "only the used characters are embedded");
+    }
+
+    /// <summary>
+    /// A paragraph, a numbered display formula (italic letters, subscripts, minus signs, Greek letters) and a paragraph
+    /// with an inline Greek letter with a subscript and a symbol that only the math font has.
+    /// </summary>
+    private static string CreateFormulaPdf()
+    {
+        string path = Path.Combine(Directory.CreateTempSubdirectory("qy-formula").FullName, "formula.pdf");
+        using var document = new PdfSharp.Pdf.PdfDocument();
+        var page = document.AddPage();
+        page.Width = XUnit.FromPoint(595);
+        page.Height = XUnit.FromPoint(842);
+        using (var gfx = XGraphics.FromPdfPage(page))
+        {
+            var body = new XFont("latin-serif", 10);
+            var bold = new XFont("latin-serif-bold", 10);
+            var italic = new XFont("latin-serif-italic", 10);
+            var small = new XFont("latin-serif", 7);
+            var math = new XFont("math", 10);
+            double x = 0, y = 0;
+            void At(double left, double baseline) => (x, y) = (left, baseline);
+            void Put(string text, XFont font, double dy = 0)
+            {
+                gfx.DrawString(text, font, XBrushes.Black, x, y + dy, XStringFormats.BaseLineLeft);
+                x += gfx.MeasureString(text, font).Width;
+            }
+
+            At(70, 160);
+            Put("Abstract—", bold);
+            Put(" The cell voltage follows from the Nernst voltage minus three losses of the stack,", body);
+            At(70, 172);
+            Put("as given in the equation below for every operating point of the system.", body);
+            At(200, 200);
+            Put("V", italic);
+            Put("cell", small, 2.5);
+            Put(" = ", body);
+            Put("E", italic);
+            Put("Nernst", small, 2.5);
+            foreach (string loss in new[] { "act", "ohm", "conc" })
+            {
+                Put(" − ", body);
+                Put("η", italic);
+                Put(loss, small, 2.5);
+            }
+            At(515, 200);
+            Put("(1)", body);
+            At(70, 230);
+            Put("The loss ", body);
+            Put("η", italic);
+            Put("act", small, 2.5);
+            Put(" grows with the current, while the product a", body);
+            Put("⋅", math);
+            Put("b stays small at every load.", body);
+        }
+        document.Save(path);
+        return path;
+    }
+
+    /// <summary>Saves a Chinese translation of the two paragraphs, keeping the objects of the second one.</summary>
+    private static string TranslateFormulaPdf(string path, PdfDocumentFile document)
+    {
+        var intro = Assert.Single(document.Segments, s => s.PlainText.Contains("Nernst voltage"));
+        var paragraph = Assert.Single(document.Segments, s => s.PlainText.Contains("grows with the current"));
+        var atoms = System.Text.RegularExpressions.Regex.Matches(paragraph.Text.Text, "<\\d+/>").Select(m => m.Value).ToList();
+        Assert.Equal(2, atoms.Count);
+        string output = OutputPaths.For(path, Languages.SimplifiedChinese);
+        document.Save(output, new Dictionary<int, string>
+        {
+            [intro.Id] = "摘要—电堆电压等于能斯特电压减去三种损耗，见下式。",
+            [paragraph.Id] = $"损耗{atoms[0]}随电流增大，而乘积 a{atoms[1]}b 在各种负荷下都很小。",
+        }, new DocumentSaveOptions(Languages.SimplifiedChinese));
+        return output;
+    }
+
+    /// <summary>The characters of the formula's line (baseline 842 − 200), with their positions and sizes.</summary>
+    private static List<(string, double, double, double)> FormulaLetters(UglyToad.PdfPig.Content.Page page) =>
+        page.Letters.Where(l => l.StartBaseLine.Y is > 842 - 206 and < 842 - 194)
+            .Select(l => (l.Value, Math.Round(l.StartBaseLine.X, 1), Math.Round(l.StartBaseLine.Y, 1), Math.Round(l.PointSize, 1))).ToList();
+
+    [Fact]
+    public void DisplayFormulasStayExactlyAsTheyWere()
+    {
+        string path = CreateFormulaPdf();
+        var document = new PdfDocumentFile(path);
+        // The two paragraphs; the formula and its number aren't sent for translation.
+        Assert.Equal(2, document.Segments.Count);
+        Assert.DoesNotContain(document.Segments, s => s.PlainText.Contains('='));
+        string output = TranslateFormulaPdf(path, document);
+
+        using var before = PigDocument.Open(path);
+        using var after = PigDocument.Open(output);
+        var original = FormulaLetters(before.GetPage(1));
+        Assert.Equal(3, original.Count(l => l.Item1 == "−"));
+        Assert.Equal(original, FormulaLetters(after.GetPage(1)));
+    }
+
+    [Fact]
+    public void SymbolsAndSubscriptsInTheTextAreNeverDropped()
+    {
+        string path = CreateFormulaPdf();
+        string output = TranslateFormulaPdf(path, new PdfDocumentFile(path));
+
+        using var result = PigDocument.Open(output);
+        var letters = result.GetPage(1).Letters.Where(l => l.StartBaseLine.Y < 842 - 210).ToList(); // the translated last paragraph
+        Assert.Contains("随电流增大", string.Concat(letters.Select(l => l.Value)));
+        Assert.DoesNotContain("grows", string.Concat(letters.Select(l => l.Value)));
+        Assert.Contains(letters, l => l.Value == "⋅"); // the CJK and Latin fonts lack it; the math font has it
+        // η keeps its subscript: smaller and lower.
+        int eta = letters.FindIndex(l => l.Value == "η");
+        Assert.True(eta >= 0);
+        Assert.Equal("act", string.Concat(letters.Skip(eta + 1).Take(3).Select(l => l.Value)));
+        Assert.All(letters.Skip(eta + 1).Take(3), l =>
+        {
+            Assert.True(l.PointSize < letters[eta].PointSize * 0.85);
+            Assert.True(l.StartBaseLine.Y < letters[eta].StartBaseLine.Y - 1);
+        });
+        // Latin letters come from a Latin font, not the CJK font's half-width forms.
+        var b = Assert.Single(letters, l => l.Value == "b");
+        Assert.DoesNotContain("zenhei", b.FontName.ToLowerInvariant());
+        Assert.DoesNotContain("simsun", b.FontName.ToLowerInvariant());
+        Assert.DoesNotContain("yahei", b.FontName.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void BoldTextStaysBold()
+    {
+        string path = CreateFormulaPdf();
+        var document = new PdfDocumentFile(path);
+        Assert.StartsWith("<1>Abstract—</1>", document.Segments[0].Text.Text);
+        string output = OutputPaths.For(path, Languages.English);
+        document.Save(output, new Dictionary<int, string> { [0] = "<1>Summary—</1> We derive the voltage of the stack." },
+            new DocumentSaveOptions(Languages.English));
+        using var result = PigDocument.Open(output);
+        var letters = result.GetPage(1).Letters.Where(l => l.StartBaseLine.Y > 842 - 180).ToList();
+        Assert.Contains("bold", Assert.Single(letters, l => l.Value == "S").FontName.ToLowerInvariant());
+        Assert.DoesNotContain("bold", Assert.Single(letters, l => l.Value == "W").FontName.ToLowerInvariant());
     }
 
     [Fact]

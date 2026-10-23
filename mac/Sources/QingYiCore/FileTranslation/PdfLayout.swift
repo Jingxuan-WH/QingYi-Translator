@@ -40,6 +40,8 @@ public final class PdfLine {
     var row = 0
     /// Shares its row with other text on the same side of the column gap: a table cell, a label, an equation number.
     var tabular = false
+    /// A line of a display formula; it is left as it is and never joins a paragraph.
+    var formula = false
 
     init(_ glyphs: [PdfGlyph], row: Int) {
         self.glyphs = glyphs
@@ -49,6 +51,21 @@ public final class PdfLine {
         y0 = glyphs.map(\.y0).min() ?? 0
         y1 = glyphs.map(\.y1).max() ?? 0
     }
+}
+
+/// One character of an inline formula or sub/superscript: its offset from the object's left end and the line's baseline.
+public struct PdfAtomGlyph: Equatable {
+    public var text: String
+    public var dx: Double
+    public var dy: Double
+    public var fontSize: Double
+    public var fontName: String
+}
+
+/// An inline formula or a sub/superscript as it was drawn, so the translation can draw it the same way.
+public struct PdfAtom: Equatable {
+    public var width: Double
+    public var glyphs: [PdfAtomGlyph]
 }
 
 /// A paragraph (or heading, caption, table cell…) found on a page.
@@ -70,8 +87,11 @@ public final class PdfBlock {
     public var firstLineIndent: Double = 0
     /// Distance between the baselines of two lines; for a single line, 1.2 × the font size.
     public var linePitch: Double = 0
-    /// The text with inline formulas as objects; their text is kept for drawing.
+    /// The text with inline formulas and sub/superscripts as objects (their text is kept). Text pieces have a style:
+    /// 1 when bold, 2 when italic, 3 when both, otherwise 0.
     public var pieces: [InlinePiece] = []
+    /// The objects among `pieces`, by object number, with their characters' positions.
+    public var atoms: [Int: PdfAtom] = [:]
     /// The page's background behind the text, 0xRRGGBB; used to cover the original text.
     public var background = 0xFFFFFF
 
@@ -112,6 +132,8 @@ public enum PdfLayout {
                                      "simsun", "stsong", "fzss"]
     private static let bullets: Set<Character> = ["•", "·", "▪", "▫", "◦", "●", "○", "■", "□", "♦", "◆", "➢", "➤", "►", "▶", "✓", "✔", "-", "–", "—", "*"]
     private static let mathSymbols: Set<Character> = ["∂", "∇", "∞", "√", "∑", "∏", "∫", "±", "×", "÷", "≤", "≥", "≠", "≈", "→", "←", "↔", "⇒", "⇔"]
+    private static let relations: Set<Character> = ["=", "<", ">", "≤", "≥", "≈", "≠", "≡", "∝", "≪", "≫", "→", "←", "⇒", "⇔", "↔", "∈", "∉", "⊂", "⊆"]
+    private static let operators: Set<Character> = ["+", "−", "×", "÷", "·", "±", "∓", "/", "^", "*"]
 
     public static func isBoldFont(_ name: String) -> Bool {
         let lower = name.lowercased()
@@ -180,9 +202,19 @@ public enum PdfLayout {
             let side = gutter.map { line.x1 <= $0 ? -1 : line.x0 >= $0 ? 1 : 0 } ?? 0
             groups["\(line.row)|\(side)", default: []].append(line)
         }
-        for group in groups.values where group.count > 1 {
-            for line in group {
-                line.tabular = true
+        for group in groups.values {
+            if group.count > 1 {
+                for line in group {
+                    line.tabular = true
+                }
+            }
+            // Display formulas, with or without an equation number such as "(1)" further right on their row.
+            let numbers = group.filter(isEquationNumber)
+            for line in group where !numbers.contains(where: { $0 === line }) {
+                line.formula = looksLikeFormula(line, numbered: numbers.contains { $0.x0 > line.x1 })
+            }
+            for number in numbers {
+                number.formula = group.contains { $0.formula && $0.x1 < number.x0 }
             }
         }
         let blocks = buildBlocks(lines)
@@ -339,6 +371,57 @@ public enum PdfLayout {
         }
     }
 
+    /// "(1)", "(2a)", "(3.12)", "(A.1)": the number of a display formula.
+    private static func isEquationNumber(_ line: PdfLine) -> Bool {
+        let text = line.glyphs.sorted { $0.x0 < $1.x0 }.map(\.text).joined()
+        return text.range(of: #"^\((?:[A-Z]\.?)?\d{1,3}(?:[.\-]\d{1,3})*[a-z]?\)$"#, options: .regularExpression) != nil
+    }
+
+    /// A line of a display formula: a relation sign with symbols, sub/superscripts or operators around it and
+    /// (next to) no ordinary words, or anything mathematical in front of an equation number.
+    private static func looksLikeFormula(_ line: PdfLine, numbered: Bool) -> Bool {
+        let glyphs = line.glyphs.sorted { $0.x0 < $1.x0 }
+        let text = glyphs.filter { !isMathGlyph($0) }
+        // The full size: sub/superscripts may outnumber the characters they belong to.
+        let size = (text.isEmpty ? glyphs : text).map(\.fontSize).max() ?? 0
+        let math = glyphs.filter(isMathGlyph).count
+        let relationCount = glyphs.filter { $0.text.contains(where: relations.contains) }.count
+        let operatorCount = glyphs.filter { $0.text.contains(where: operators.contains) }.count
+        var scripts = 0, words = 0, letters = 0
+        var inScript = false
+        for i in 0...glyphs.count {
+            var plainLetter = false
+            if i < glyphs.count {
+                let glyph = glyphs[i]
+                let small = glyph.fontSize < 0.85 * size
+                if small && !inScript {
+                    scripts += 1
+                }
+                inScript = small
+                plainLetter = !small && !isMathGlyph(glyph) && glyph.text.allSatisfy(\.isLetter)
+                if plainLetter && letters > 0 && glyph.x0 - glyphs[i - 1].x1 > 0.15 * size {
+                    words += letters >= 4 ? 1 : 0
+                    letters = 0
+                }
+            }
+            // Ordinary words: four or more full-size letters in a row (variables are single letters, functions short).
+            if !plainLetter {
+                words += letters >= 4 ? 1 : 0
+                letters = 0
+            } else {
+                letters += glyphs[i].text.count
+            }
+        }
+        if words >= 3 {
+            return false
+        }
+        let symbols = math + scripts + operatorCount
+        if numbered {
+            return relationCount + symbols >= 1
+        }
+        return relationCount >= 1 && ((symbols >= 2 && words == 0) || (symbols >= 4 && words <= 1))
+    }
+
     private static func startsWithBullet(_ line: PdfLine) -> Bool {
         let text = Array(line.glyphs.prefix(4).map(\.text).joined())
         guard let first = text.first else { return false }
@@ -375,7 +458,8 @@ public enum PdfLayout {
                     continue
                 }
                 // Table cells and labels sit next to other text on the same row; they don't continue each other.
-                if line.tabular || last.tabular {
+                // Nor do formulas and the text around them.
+                if line.tabular || last.tabular || line.formula != last.formula {
                     continue
                 }
                 let overlap = min(block.x1, line.x1) - max(block.x0, line.x0)
@@ -412,7 +496,7 @@ public enum PdfLayout {
         let glyphs = block.lines.flatMap(\.glyphs)
         let math = glyphs.filter(isMathGlyph).count
         let letters = glyphs.filter { !isMathGlyph($0) && $0.text.contains(where: \.isLetter) }.count
-        block.isFormula = Double(math) >= 0.4 * Double(glyphs.count) || (math > 0 && letters <= 3)
+        block.isFormula = block.lines.allSatisfy(\.formula) || Double(math) >= 0.4 * Double(glyphs.count) || (math > 0 && letters <= 3)
         var textGlyphs = glyphs.filter { !isMathGlyph($0) }
         if textGlyphs.isEmpty {
             textGlyphs = [glyphs[0]]
@@ -455,39 +539,63 @@ public enum PdfLayout {
         } else {
             block.centered = abs((x0 + x1) / 2 - pageWidth / 2) < pageWidth * 0.03 && width < pageWidth * 0.7
         }
-        block.pieces = buildPieces(lines)
+        var atoms: [Int: PdfAtom] = [:]
+        block.pieces = buildPieces(lines, atoms: &atoms)
+        block.atoms = atoms
     }
 
-    /// The block's text: spaces where the gap between characters is wide, hyphenation at line ends undone, formulas as objects.
-    private static func buildPieces(_ lines: [PdfLine]) -> [InlinePiece] {
+    /// The block's text: spaces where the gap between characters is wide, hyphenation at line ends undone, bold and
+    /// italic text as styles, and inline formulas and sub/superscripts as objects that keep their characters' positions.
+    private static func buildPieces(_ lines: [PdfLine], atoms: inout [Int: PdfAtom]) -> [InlinePiece] {
         var pieces: [InlinePiece] = []
         var text = ""
-        var formula = ""
-        var atoms = 0
+        var style = 0
+        var word: [PdfGlyph] = [] // the characters of the word at the end of text
+        var formula: [PdfGlyph] = []
+        var formulaText = ""
+        var baseline = 0.0
         var last: Character?
 
         func flushText() {
             if !text.isEmpty {
-                pieces.append(.of(text, 0))
+                pieces.append(.of(text, style))
             }
             text = ""
+            word = []
         }
 
         func flushFormula() {
-            guard !formula.isEmpty else { return }
+            guard let first = formula.first else { return }
             flushText()
-            let value = formula
-            pieces.append(.object(atoms, value.trimmingCharacters(in: .whitespaces)))
-            atoms += 1
-            formula = ""
+            let x0 = first.x0
+            let atom = atoms.count
+            atoms[atom] = PdfAtom(width: formula.map(\.x1).max()! - x0, glyphs: formula.map {
+                PdfAtomGlyph(text: $0.text, dx: $0.x0 - x0, dy: $0.y0 + 0.25 * $0.fontSize - baseline, fontSize: $0.fontSize, fontName: $0.fontName)
+            })
+            let value = formulaText
+            pieces.append(.object(atom, value.trimmingCharacters(in: .whitespaces)))
+            formula = []
+            formulaText = ""
             if value.hasSuffix(" ") {
                 text += " "
             }
         }
 
+        func startFormula(takeWord: Bool) {
+            // A subscript or superscript takes the short word it is attached to: V + cell, x + 2.
+            let taken = takeWord && (1...2).contains(word.count) ? word : []
+            text.removeLast(taken.reduce(0) { $0 + $1.text.count })
+            flushText()
+            for glyph in taken {
+                formula.append(glyph)
+                formulaText += glyph.text
+            }
+        }
+
         func space() {
+            word = []
             if !formula.isEmpty {
-                formula += " "
+                formulaText += " "
             } else if let end = text.last, end != " " {
                 text += " "
             } else if text.isEmpty && !pieces.isEmpty {
@@ -499,13 +607,18 @@ public enum PdfLayout {
             let glyphs = line.glyphs.sorted { $0.x0 < $1.x0 }
             let size = line.fontSize
             if l > 0, let first = glyphs.first?.text.first {
+                // An inline formula ends with its line, so its characters keep their places relative to each other.
+                flushFormula()
                 // "trans-" + "lation" → "translation"; CJK lines join without a space.
                 if last == "-" && first.isLowercase && text.count > 1 && text.dropLast().last?.isLetter == true {
                     text.removeLast()
                 } else if !(isCjk(last) && isCjk(first)) {
                     space()
                 }
+                word = []
             }
+            let mainSize = glyphs.filter { abs($0.fontSize - size) <= 0.1 * size }.map { $0.y0 + 0.25 * $0.fontSize }
+            baseline = mainSize.isEmpty ? glyphs[0].y0 + 0.25 * glyphs[0].fontSize : median(mainSize)
             for (i, glyph) in glyphs.enumerated() {
                 if i > 0 {
                     let gap = glyph.x0 - glyphs[i - 1].x1
@@ -513,20 +626,30 @@ public enum PdfLayout {
                         space()
                     }
                 }
-                if isMathGlyph(glyph) {
+                let math = isMathGlyph(glyph)
+                let script = glyph.fontSize < 0.85 * size && !isCjk(glyph.text.first)
+                if math || script {
                     if formula.isEmpty {
-                        flushText()
+                        startFormula(takeWord: script && !math)
                     }
-                    formula += glyph.text
+                    formula.append(glyph)
+                    formulaText += glyph.text
+                } else if !formula.isEmpty && !glyph.text.contains(where: \.isLetter) && glyph.text != "," && glyph.text != "." {
+                    // Plain digits and symbols right after a formula symbol (x², f(x) = …) keep the formula together.
+                    formula.append(glyph)
+                    formulaText += glyph.text
                 } else {
-                    // Plain letters and digits right after a formula symbol (x², f(x) = …) keep the formula together.
-                    let symbolOnly = !glyph.text.contains(where: \.isLetter) && glyph.text != "," && glyph.text != "."
-                    if !formula.isEmpty && (symbolOnly || (text.isEmpty && glyph.fontSize < size * 0.85)) {
-                        formula += glyph.text
-                    } else {
-                        flushFormula()
-                        text += glyph.text
+                    flushFormula()
+                    let glyphStyle = (glyph.isBold ? 1 : 0) | (isItalicFont(glyph.fontName) ? 2 : 0)
+                    if glyphStyle != style {
+                        // A space left over from before takes the new style rather than becoming a piece of its own.
+                        if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                            flushText()
+                        }
+                        style = glyphStyle
                     }
+                    text += glyph.text
+                    word.append(glyph)
                 }
                 last = glyph.text.last
             }
@@ -538,7 +661,7 @@ public enum PdfLayout {
             while trimmed.last?.isWhitespace == true {
                 trimmed.removeLast()
             }
-            pieces[pieces.count - 1] = .of(trimmed, 0)
+            pieces[pieces.count - 1] = .of(trimmed, end.style)
         }
         return pieces
     }

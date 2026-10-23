@@ -70,6 +70,15 @@ struct SegmentBatcherTests {
 }
 
 struct DomainAnalyzerTests {
+    @Test func sampleMarksFormatChangesInsideWords() {
+        let formula = DocumentSegment(id: 0, text: TaggedText.build([.of("V", 0), .of("cell", 1), .of(" = E", 0), .of("Nernst", 1)]))
+        let chinese = DocumentSegment(id: 1, text: TaggedText.build([.of("电堆性能的", 0), .of("退化", 1), .of("很慢。", 0)]))
+        let sample = DomainAnalyzer.buildSample([formula, chinese])
+        #expect(sample.contains("V_cell = E_Nernst"))
+        #expect(sample.contains("电堆性能的退化很慢。"))
+        #expect(DomainAnalyzer.buildSystemPrompt(target: Languages.simplifiedChinese, answerLanguage: Languages.simplifiedChinese).contains("V_cell"))
+    }
+
     @Test func parsesFencedJsonWithChatter() throws {
         let profile = try #require(DomainAnalyzer.parse("""
             Here is the analysis:
