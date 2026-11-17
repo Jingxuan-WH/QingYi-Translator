@@ -18,6 +18,7 @@ let package = Package(
             dependencies: ["QingYiCore"],
             path: "Sources/QingYiTranslator"),
         .testTarget(name: "QingYiCoreTests", dependencies: ["QingYiCore", "ZIPFoundation"], path: "Tests/QingYiCoreTests"),
+        .testTarget(name: "QingYiAppTests", dependencies: ["QingYiTranslator"], path: "Tests/QingYiAppTests"),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -237,8 +237,13 @@ struct PaneTextView: NSViewRepresentable {
             textView.font = NSFont.systemFont(ofSize: fontSize)
         }
 
+        // The native editor can be ahead of its binding while an input method is
+        // composing or before textDidChange is delivered. Translation/status
+        // redraws must not restore the same old model value over that newer input.
+        let modelTextChanged = coordinator.lastModelText != text
+        coordinator.lastModelText = text
         let current = textView.string
-        if current != text {
+        if current != text && (!isEditable || modelTextChanged) {
             coordinator.isUpdating = true
             if !isEditable, text.hasPrefix(current), let storage = textView.textStorage {
                 // Streaming: append only the new piece, keeping the scroll position stable.
@@ -275,6 +280,7 @@ struct PaneTextView: NSViewRepresentable {
         weak var textView: NSTextView?
         var isUpdating = false
         var lastFocusRequest = 0
+        var lastModelText: String?
 
         init(parent: PaneTextView) { self.parent = parent }
 
