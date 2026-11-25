@@ -479,8 +479,7 @@ public partial class MainWindow : Window
         if (_translation is not null && IsVisible && Motion.Enabled)
         {
             LoadingTrack.Visibility = Visibility.Visible;
-            double width = Math.Max(OutputPane.ActualWidth, 200);
-            var sweep = new DoubleAnimation(-140, width, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
+            var sweep = new DoubleAnimation(-140, 500, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
             LoadingShift.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, sweep);
         }
     }

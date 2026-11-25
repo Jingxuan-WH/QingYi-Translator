@@ -412,7 +412,9 @@
         <Setter Property="FontSize" Value="18"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
         <Setter Property="AcceptsReturn" Value="True"/>
-        <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        <!-- WPF disables background text layout with Auto. Reserve the narrow scrollbar
+             gutter to keep wrapping stable and allow large documents to lay out in slices. -->
+        <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
         <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBrush}"/>
         <Setter Property="SelectionOpacity" Value="0.3"/>
@@ -635,6 +637,10 @@
             </Setter.Value>
         </Setter>
         <Style.Triggers>
+            <Trigger Property="Maximum" Value="0">
+                <Setter Property="Opacity" Value="0"/>
+                <Setter Property="IsHitTestVisible" Value="False"/>
+            </Trigger>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto"/>
                 <Setter Property="MinWidth" Value="0"/>

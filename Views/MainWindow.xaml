@@ -238,13 +238,16 @@
                                      AutomationProperties.AutomationId="OutputBox" AutomationProperties.Name="{v:T 译文, En=Translation}"/>
                             <TextBlock x:Name="OutputPlaceholder" Margin="22,14,20,0" Text="{v:T 译文, En=Translation}" FontSize="18"
                                        Foreground="{DynamicResource TextTertiaryBrush}" IsHitTestVisible="False"/>
-                            <Canvas x:Name="LoadingTrack" Height="2" VerticalAlignment="Top" ClipToBounds="True" Visibility="Collapsed">
-                                <Rectangle Width="140" Height="2" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentTextBrush}">
-                                    <Rectangle.RenderTransform>
-                                        <TranslateTransform x:Name="LoadingShift"/>
-                                    </Rectangle.RenderTransform>
-                                </Rectangle>
-                            </Canvas>
+                            <Viewbox x:Name="LoadingTrack" Height="2" VerticalAlignment="Top" Stretch="Fill"
+                                     IsHitTestVisible="False" ClipToBounds="True" Visibility="Collapsed">
+                                <Canvas Width="500" Height="2" ClipToBounds="True">
+                                    <Rectangle Width="140" Height="2" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentTextBrush}">
+                                        <Rectangle.RenderTransform>
+                                            <TranslateTransform x:Name="LoadingShift"/>
+                                        </Rectangle.RenderTransform>
+                                    </Rectangle>
+                                </Canvas>
+                            </Viewbox>
 
                             <Border x:Name="ErrorPanel" Grid.Row="1" Margin="14,0,14,4" Padding="12,9" CornerRadius="8"
                                     Background="{DynamicResource ErrorSoftBrush}" Visibility="Collapsed">
