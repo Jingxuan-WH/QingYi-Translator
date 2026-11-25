@@ -238,12 +238,7 @@ final class LiveViewModel: ObservableObject {
         }
         session.onMicrophoneSilent = { [weak self, weak session] in
             guard let self, let session, self.session === session, state == .running, banner == nil else { return }
-            Log.info("实时转录：麦克风一直没有声音")
-            microphoneSilentHint = true
-            showBanner(.permission(.microphone)) {
-                L("麦克风到现在还没有收到声音。如果你已经在说话，请检查麦克风没有静音、选对了设备，以及“系统设置 › 声音 › 输入”里的输入音量；更新轻译后麦克风授权可能失效（这时只会收到静音），可以点“重置权限”后重新开始。",
-                  "The microphone hasn’t picked up any sound yet. If you are already speaking, check that it isn’t muted, the right device is picked and the input volume under System Settings › Sound › Input isn’t zero. After an update the microphone permission may no longer apply (the app then only receives silence); click “Reset permission” and start again.")
-            }
+            reportMicrophoneSilence()
         }
         session.onSystemAudioSilent = { [weak self, weak session] in
             guard let self, let session, self.session === session else { return }
@@ -413,6 +408,15 @@ final class LiveViewModel: ObservableObject {
 
     private func showBanner(_ kind: BannerKind, _ text: @escaping () -> String) {
         banner = Banner(kind: kind, text: text, progress: nil)
+    }
+
+    func reportMicrophoneSilence() {
+        Log.info("实时转录：麦克风一直没有声音")
+        microphoneSilentHint = true
+        showBanner(.permission(.microphone)) {
+            L("麦克风到现在还没有收到声音。如果你已经在说话，请检查麦克风没有静音、选对了设备，以及“系统设置 › 声音 › 输入”里的输入音量；更新轻译后麦克风授权可能失效（这时只会收到静音），可以点“重置权限”后重新开始。",
+              "The microphone hasn’t picked up any sound yet. If you are already speaking, check that it isn’t muted, the right device is picked and the input volume under System Settings › Sound › Input isn’t zero. After an update the microphone permission may no longer apply (the app then only receives silence); click “Reset permission” and start again.")
+        }
     }
 
     func dismissBanner() { banner = nil }

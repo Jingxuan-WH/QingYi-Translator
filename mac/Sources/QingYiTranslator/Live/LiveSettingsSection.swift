@@ -167,11 +167,12 @@ struct LiveSettingsSection: View {
     }
 
     private func permissionRow(_ title: String, _ status: LivePermissions.Status, _ kind: LivePermissions.Kind) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(color(status)).frame(width: 7, height: 7)
-            Text(title).font(.system(size: 13))
-            Text(describe(status)).font(.system(size: 12)).foregroundColor(Palette.textTertiary)
-            Spacer()
+        WrappingRow {
+            HStack(spacing: 8) {
+                Circle().fill(color(status)).frame(width: 7, height: 7)
+                Text(title).font(.system(size: 13))
+                Text(describe(status)).font(.system(size: 12)).foregroundColor(Palette.textTertiary)
+            }
             if status != .granted {
                 Button(L("打开系统设置…", "Open System Settings…")) { LivePermissions.openSettings(kind) }.buttonStyle(LinkButtonStyle())
             }

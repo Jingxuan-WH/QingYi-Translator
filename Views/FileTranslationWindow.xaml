@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Translator.Views"
         Title="{v:T 翻译文件, En='Translate a file'}"
-        Width="720" Height="640" MinWidth="560" MinHeight="460"
+        Width="720" Height="640" MinWidth="390" MinHeight="460"
         WindowStartupLocation="Manual"
         Background="{DynamicResource WindowBrush}"
         Foreground="{DynamicResource TextPrimaryBrush}"
@@ -78,7 +78,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24">
                 <TextBlock Text="&#xE8B5;" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center"
                            Foreground="{DynamicResource AccentTextBrush}"/>
-                <TextBlock Margin="0,14,0,0" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"
+                <TextBlock Margin="0,14,0,0" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                            Text="{v:T 把文件拖到这里，或点击选择文件, En='Drop a file here, or click to choose one'}"/>
                 <TextBlock Margin="0,8,0,0" FontSize="13" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="460"
                            Foreground="{DynamicResource TextSecondaryBrush}"
@@ -90,7 +90,7 @@
         <StackPanel x:Name="BusyPanel" Grid.Row="1" Margin="48,0" VerticalAlignment="Center" Visibility="Collapsed">
             <TextBlock x:Name="BusyText" FontSize="15" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                        AutomationProperties.AutomationId="BusyText"/>
-            <ProgressBar x:Name="BusyBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" Width="320" IsIndeterminate="True"/>
+            <ProgressBar x:Name="BusyBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" MaxWidth="320" IsIndeterminate="True"/>
             <TextBlock x:Name="BusyHint" Margin="0,12,0,0" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                        Foreground="{DynamicResource TextTertiaryBrush}"/>
         </StackPanel>
@@ -101,7 +101,7 @@
                 <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="2*" MaxWidth="220"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{v:T 翻译成, En='Translate into'}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -153,34 +153,36 @@
         </ScrollViewer>
 
         <!-- Translating, done or failed -->
-        <StackPanel x:Name="ResultPanel" Grid.Row="1" Margin="48,0" VerticalAlignment="Center" Visibility="Collapsed">
-            <TextBlock x:Name="ResultIcon" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center" Visibility="Collapsed"/>
-            <TextBlock x:Name="ResultHeading" Margin="0,10,0,0" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"
-                       TextWrapping="Wrap" TextAlignment="Center" AutomationProperties.AutomationId="ResultHeading"/>
-            <ProgressBar x:Name="TranslateBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" Width="360" Minimum="0" Maximum="1"/>
-            <TextBlock x:Name="ResultText" Margin="0,12,0,0" FontSize="13" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
-                       Foreground="{DynamicResource TextSecondaryBrush}" AutomationProperties.AutomationId="ResultText"/>
-            <TextBlock x:Name="WarningText" Margin="0,10,0,0" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
-                       Foreground="{DynamicResource WarningBrush}" Visibility="Collapsed" AutomationProperties.AutomationId="WarningText"/>
-            <StackPanel x:Name="OpenButtons" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0" Visibility="Collapsed">
-                <Button Style="{StaticResource PrimaryButton}" Content="{v:T 打开译文, En='Open translation'}"
-                        AutomationProperties.AutomationId="OpenOutputButton" Click="OpenOutput_Click"/>
-                <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Content="{v:T 在资源管理器中显示, En='Show in Explorer'}"
-                        AutomationProperties.AutomationId="ShowInExplorerButton" Click="ShowInExplorer_Click"/>
-                <Button x:Name="OpenBilingualButton" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Visibility="Collapsed"
-                        Content="{v:T 打开双语对照版, En='Open bilingual version'}" Click="OpenBilingual_Click"/>
+        <ScrollViewer x:Name="ResultPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalContentAlignment="Center" Visibility="Collapsed">
+            <StackPanel Margin="24,12">
+                <TextBlock x:Name="ResultIcon" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                <TextBlock x:Name="ResultHeading" Margin="0,10,0,0" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" AutomationProperties.AutomationId="ResultHeading"/>
+                <ProgressBar x:Name="TranslateBar" Style="{StaticResource ThinProgressBar}" Margin="0,16,0,0" MaxWidth="360" Minimum="0" Maximum="1"/>
+                <TextBlock x:Name="ResultText" Margin="0,12,0,0" FontSize="13" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                           Foreground="{DynamicResource TextSecondaryBrush}" AutomationProperties.AutomationId="ResultText"/>
+                <TextBlock x:Name="WarningText" Margin="0,10,0,0" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                           Foreground="{DynamicResource WarningBrush}" Visibility="Collapsed" AutomationProperties.AutomationId="WarningText"/>
+                <WrapPanel x:Name="OpenButtons" HorizontalAlignment="Center" Margin="0,18,0,0" Visibility="Collapsed">
+                    <Button Style="{StaticResource PrimaryButton}" Content="{v:T 打开译文, En='Open translation'}"
+                            AutomationProperties.AutomationId="OpenOutputButton" Click="OpenOutput_Click"/>
+                    <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Content="{v:T 在资源管理器中显示, En='Show in Explorer'}"
+                            AutomationProperties.AutomationId="ShowInExplorerButton" Click="ShowInExplorer_Click"/>
+                    <Button x:Name="OpenBilingualButton" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Visibility="Collapsed"
+                            Content="{v:T 打开双语对照版, En='Open bilingual version'}" Click="OpenBilingual_Click"/>
+                </WrapPanel>
             </StackPanel>
-        </StackPanel>
+        </ScrollViewer>
 
         <!-- Footer -->
         <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="24,12">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <WrapPanel x:Name="FileActions" DockPanel.Dock="Right" HorizontalAlignment="Right">
                     <Button x:Name="SecondaryButton" Style="{StaticResource SecondaryButton}" Visibility="Collapsed"
                             AutomationProperties.AutomationId="FileSecondaryButton" Click="SecondaryButton_Click"/>
                     <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Visibility="Collapsed" IsDefault="True"
                             AutomationProperties.AutomationId="FilePrimaryButton" Click="PrimaryButton_Click"/>
-                </StackPanel>
+                </WrapPanel>
                 <TextBlock x:Name="FooterText" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" Margin="0,0,12,0"
                            Foreground="{DynamicResource TextTertiaryBrush}" AutomationProperties.AutomationId="FileFooterText"/>
             </DockPanel>

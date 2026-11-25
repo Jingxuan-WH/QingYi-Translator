@@ -7,21 +7,34 @@ struct LiveView: View {
     @EnvironmentObject var loc: Loc
     var window: () -> NSWindow?
 
+    @State private var headerHeight: CGFloat = 0
+
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            if let banner = model.banner {
-                bannerView(banner)
+        GeometryReader { geometry in
+            // Leave the transcript visible even when permissions need a long explanation.
+            let headerLimit = floor(geometry.size.height * 0.53)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        toolbar
+                        if let banner = model.banner {
+                            bannerView(banner)
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                }
+                .frame(height: headerHeight > 0 ? min(headerHeight, headerLimit) : headerLimit)
+                LiveTranscriptList(model: model)
+                    .background(Palette.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
+                    .padding(EdgeInsets(top: 12, leading: 18, bottom: 0, trailing: 18))
+                footer
             }
-            LiveTranscriptList(model: model)
-                .background(Palette.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
-                .padding(EdgeInsets(top: 12, leading: 18, bottom: 0, trailing: 18))
-            footer
         }
+        .stateMotion(.reveal, value: model.banner != nil)
         .background(Palette.window)
-        .frame(minWidth: 600, minHeight: 420)
+        .frame(minWidth: 390, minHeight: 420)
         .onAppear { model.refreshMicrophones() }
     }
 
@@ -29,58 +42,26 @@ struct LiveView: View {
 
     private var toolbar: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Picker("", selection: $model.audioSource) {
-                    Text(L("麦克风", "Microphone")).tag(LiveSettings.sourceMicrophone)
-                    Text(L("电脑播放的声音", "Mac sound")).tag(LiveSettings.sourceSystem)
-                    Text(L("麦克风 + 电脑声音", "Microphone + Mac sound")).tag(LiveSettings.sourceBoth)
-                }
-                .labelsHidden().frame(width: 170).help(L("音源", "Audio source"))
-                if model.usesMicrophone {
-                    Picker("", selection: $model.microphoneId) {
-                        Text(L("默认麦克风（跟随系统）", "Default microphone")).tag("")
-                        ForEach(model.microphones, id: \.uid) { device in
-                            Text(device.name).tag(device.uid)
-                        }
-                    }
-                    .labelsHidden().frame(width: 220).help(L("麦克风", "Microphone"))
-                }
-                Spacer(minLength: 12)
-                Picker("", selection: $model.sourceLanguage) {
-                    Text(L("自动检测（中文 / 英文）", "Detect (Chinese / English)")).tag(Languages.autoCode)
-                    Divider()
-                    ForEach(Languages.all) { language in
-                        Text(language.localName).tag(language.code)
-                    }
-                }
-                .labelsHidden().frame(width: 180).help(L("说话的语言", "Spoken language")).disabled(model.state == .preparing || model.state == .downloading)
-                Image(systemName: "arrow.right").font(.system(size: 12)).foregroundColor(Palette.textTertiary)
-                Picker("", selection: $model.targetLanguage) {
-                    ForEach(Languages.all) { language in
-                        Text(language.localName).tag(language.code)
-                    }
-                }
-                .labelsHidden().frame(width: 140).help(L("译成", "Translate into"))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { audioControls; Spacer(minLength: 12); languageControls }
+                VStack(alignment: .leading, spacing: 8) { audioControls; languageControls }
             }
-            HStack(spacing: 8) {
-                Button(model.state == .paused ? L("继续", "Resume") : L("开始", "Start")) { model.startOrResume() }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.state != .idle && model.state != .paused)
-                    .opacity(model.state != .idle && model.state != .paused ? 0.5 : 1)
-                Button(L("暂停", "Pause")) { model.pause() }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.state != .running)
-                    .opacity(model.state != .running ? 0.5 : 1)
-                Button(L("停止", "Stop")) { model.stop() }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.state == .idle)
-                    .opacity(model.state == .idle ? 0.5 : 1)
+            WrappingRow {
+                if model.state == .idle || model.state == .paused {
+                    Button(model.state == .paused ? L("继续", "Resume") : L("开始", "Start")) { model.startOrResume() }
+                        .buttonStyle(PrimaryButtonStyle())
+                }
+                if model.state == .running {
+                    Button(L("暂停", "Pause")) { model.pause() }.buttonStyle(PrimaryButtonStyle())
+                }
+                if model.state != .idle {
+                    Button(L("停止", "Stop")) { model.stop() }.buttonStyle(SecondaryButtonStyle())
+                }
                 if model.state == .preparing || model.state == .downloading {
                     ProgressView().controlSize(.small).padding(.leading, 8)
                 }
                 Text(model.statusText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1).truncationMode(.tail)
                     .padding(.leading, model.state == .preparing || model.state == .downloading ? 0 : 8)
-                Spacer(minLength: 8)
                 if model.usesMicrophone {
                     LevelMeter(symbol: "mic", level: model.micLevel).help(L("麦克风音量", "Microphone level"))
                 }
@@ -94,13 +75,53 @@ struct LiveView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 1) }
     }
 
+    private var audioControls: some View {
+        WrappingRow(spacing: 10) {
+            Picker("", selection: $model.audioSource) {
+                Text(L("麦克风", "Microphone")).tag(LiveSettings.sourceMicrophone)
+                Text(L("电脑播放的声音", "Mac sound")).tag(LiveSettings.sourceSystem)
+                Text(L("麦克风 + 电脑声音", "Microphone + Mac sound")).tag(LiveSettings.sourceBoth)
+            }
+            .labelsHidden().frame(width: 170).help(L("音源", "Audio source"))
+            if model.usesMicrophone {
+                Picker("", selection: $model.microphoneId) {
+                    Text(L("默认麦克风（跟随系统）", "Default microphone")).tag("")
+                    ForEach(model.microphones, id: \.uid) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+                .labelsHidden().frame(width: 220).help(L("麦克风", "Microphone"))
+            }
+        }
+    }
+
+    private var languageControls: some View {
+        HStack(spacing: 10) {
+            Picker("", selection: $model.sourceLanguage) {
+                Text(L("自动检测（中文 / 英文）", "Detect (Chinese / English)")).tag(Languages.autoCode)
+                Divider()
+                ForEach(Languages.all) { language in
+                    Text(language.localName).tag(language.code)
+                }
+            }
+            .labelsHidden().frame(width: 180).help(L("说话的语言", "Spoken language")).disabled(model.state == .preparing || model.state == .downloading)
+            Image(systemName: "arrow.right").font(.system(size: 12)).foregroundColor(Palette.textTertiary)
+            Picker("", selection: $model.targetLanguage) {
+                ForEach(Languages.all) { language in
+                    Text(language.localName).tag(language.code)
+                }
+            }
+            .labelsHidden().frame(width: 140).help(L("译成", "Translate into"))
+        }
+    }
+
     private func bannerView(_ banner: LiveViewModel.Banner) -> some View {
         let isError: Bool
         switch banner.kind {
         case .info, .modelDownload: isError = false
         default: isError = true
         }
-        return HStack(alignment: .center, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(banner.text()).font(.system(size: 13)).foregroundColor(isError ? Palette.errorText : Palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -108,19 +129,20 @@ struct LiveView: View {
                     ProgressView(value: progress).progressViewStyle(.linear)
                 }
             }
-            Spacer(minLength: 0)
-            if case .permission(let kind) = banner.kind {
-                Button(L("重置权限", "Reset permission")) { model.resetPermission(kind) }
-                    .buttonStyle(LinkButtonStyle())
-                    .help(L("清除 macOS 记住的授权，下次开始时会重新询问（更新轻译后授权失效时有用）",
-                            "Clears what macOS remembers, so it asks again next time (useful when an update invalidated the permission)"))
-            }
-            if banner.progress == nil {
-                Button(bannerButtonTitle(banner.kind)) { model.bannerPrimaryAction() }
-                    .buttonStyle(SecondaryButtonStyle(compact: true))
-            }
-            if banner.kind != .info && banner.progress == nil {
-                IconButton(symbol: "xmark", help: L("关闭", "Dismiss"), size: 24, fontSize: 11) { model.dismissBanner() }
+            WrappingRow {
+                if case .permission(let kind) = banner.kind {
+                    Button(L("重置权限", "Reset permission")) { model.resetPermission(kind) }
+                        .buttonStyle(LinkButtonStyle())
+                        .help(L("清除 macOS 记住的授权，下次开始时会重新询问（更新轻译后授权失效时有用）",
+                                "Clears what macOS remembers, so it asks again next time (useful when an update invalidated the permission)"))
+                }
+                if banner.progress == nil {
+                    Button(bannerButtonTitle(banner.kind)) { model.bannerPrimaryAction() }
+                        .buttonStyle(SecondaryButtonStyle(compact: true))
+                }
+                if banner.kind != .info && banner.progress == nil {
+                    IconButton(symbol: "xmark", help: L("关闭", "Dismiss"), size: 24, fontSize: 11) { model.dismissBanner() }
+                }
             }
         }
         .padding(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 10))
@@ -141,7 +163,7 @@ struct LiveView: View {
     // ---------------- options and export ----------------
 
     private var footer: some View {
-        HStack(spacing: 20) {
+        WrappingRow(spacing: 12) {
             Toggle(isOn: $model.translatePartials) {
                 Text(L("临时结果也预翻译", "Translate partial results too")).font(.system(size: 13))
             }
@@ -151,24 +173,25 @@ struct LiveView: View {
                 Text(L("悬浮字幕", "Floating captions")).font(.system(size: 13))
             }
             .toggleStyle(.switch).controlSize(.small)
-            Spacer()
-            Menu {
-                Section(L("文本", "Text")) {
-                    Button(L("TXT · 原文和译文", "TXT · original and translation")) { model.export(format: .text, content: .bilingual, window: window()) }
-                    Button(L("TXT · 原文", "TXT · original")) { model.export(format: .text, content: .original, window: window()) }
-                    Button(L("TXT · 译文", "TXT · translation")) { model.export(format: .text, content: .translation, window: window()) }
+            if !model.transcript.lines.isEmpty {
+                Menu {
+                    Section(L("文本", "Text")) {
+                        Button(L("TXT · 原文和译文", "TXT · original and translation")) { model.export(format: .text, content: .bilingual, window: window()) }
+                        Button(L("TXT · 原文", "TXT · original")) { model.export(format: .text, content: .original, window: window()) }
+                        Button(L("TXT · 译文", "TXT · translation")) { model.export(format: .text, content: .translation, window: window()) }
+                    }
+                    Section(L("字幕", "Subtitles")) {
+                        Button(L("SRT · 双语", "SRT · bilingual")) { model.export(format: .srt, content: .bilingual, window: window()) }
+                        Button(L("SRT · 原文", "SRT · original")) { model.export(format: .srt, content: .original, window: window()) }
+                        Button(L("SRT · 译文", "SRT · translation")) { model.export(format: .srt, content: .translation, window: window()) }
+                    }
+                } label: {
+                    Text(L("导出…", "Export…")).font(.system(size: 13))
                 }
-                Section(L("字幕", "Subtitles")) {
-                    Button(L("SRT · 双语", "SRT · bilingual")) { model.export(format: .srt, content: .bilingual, window: window()) }
-                    Button(L("SRT · 原文", "SRT · original")) { model.export(format: .srt, content: .original, window: window()) }
-                    Button(L("SRT · 译文", "SRT · translation")) { model.export(format: .srt, content: .translation, window: window()) }
-                }
-            } label: {
-                Text(L("导出…", "Export…")).font(.system(size: 13))
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                Button(L("清空", "Clear")) { model.clear(window: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            Button(L("清空", "Clear")) { model.clear(window: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
         }
         .padding(EdgeInsets(top: 10, leading: 20, bottom: 12, trailing: 18))
     }
@@ -187,7 +210,7 @@ struct LevelMeter: View {
                 Capsule().fill(Palette.accent).frame(width: 70 * CGFloat(min(1, max(0, level))))
             }
             .frame(width: 70, height: 4)
-            .animation(.linear(duration: 0.08), value: level)
+            .stateMotion(.feedback, value: level)
         }
     }
 }
@@ -291,6 +314,7 @@ struct LiveLineRow: View {
         .padding(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
         .background(hovering ? Palette.hover : Color.clear)
         .contentShape(Rectangle())
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
         .contextMenu {
             Button(L("复制原文", "Copy original")) { model.copy(line, original: true, translation: false) }
@@ -348,6 +372,7 @@ struct CaptionView: View {
         }
         .padding(EdgeInsets(top: 12, leading: 20, bottom: 14, trailing: 14))
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.72)))
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
     }
 

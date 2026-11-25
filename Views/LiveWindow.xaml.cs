@@ -68,6 +68,14 @@ public partial class LiveWindow : Window
         _settings = settings;
         _glossary = glossary;
         InitializeComponent();
+        SizeChanged += (_, _) =>
+        {
+            SetupScroller.MaxHeight = Math.Max(140, ActualHeight - 235);
+            SourceLanguageBox.Width = TargetLanguageBox.Width = ActualWidth < 440 ? 130 : 150;
+            var edge = ActualWidth < 640 ? Dock.Bottom : Dock.Right;
+            DockPanel.SetDock(BannerActions, edge);
+            DockPanel.SetDock(TranscriptActions, edge);
+        };
 
         _sourceLanguages = [_autoOption, .. Languages.All.Select(language => new LanguageOption(language))];
         _targetLanguages = Languages.All.Select(language => new LanguageOption(language)).ToList();
@@ -667,7 +675,7 @@ public partial class LiveWindow : Window
         BannerLinkButton.Visibility = link is null ? Visibility.Collapsed : Visibility.Visible;
         DownloadOptions.Visibility = Visibility.Collapsed;
         BannerProgress.Visibility = Visibility.Collapsed;
-        Banner.Visibility = Visibility.Visible;
+        Motion.Show(Banner, true);
     }
 
     // Keeps the banner's buttons but shows what went wrong.

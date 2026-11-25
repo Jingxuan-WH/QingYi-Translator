@@ -132,7 +132,8 @@ final class FileTranslationViewModel: ObservableObject {
         load(url)
     }
 
-    func chooseFile(from window: NSWindow?) {
+    func chooseFile(from window: NSWindow?, onCancel: (() -> Void)? = nil) {
+        guard let window, window.attachedSheet == nil else { return }
         if refuseWhileTranslating() {
             return
         }
@@ -144,8 +145,13 @@ final class FileTranslationViewModel: ObservableObject {
         if let folder = fileURL?.deletingLastPathComponent() {
             panel.directoryURL = folder
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        load(url)
+        panel.beginSheetModal(for: window) { [weak self] response in
+            if response == .OK, let url = panel.url {
+                self?.open(url)
+            } else {
+                onCancel?()
+            }
+        }
     }
 
     private func refuseWhileTranslating() -> Bool {
@@ -413,14 +419,19 @@ struct FileTranslationView: View {
                 case .pick: pickPanel
                 case .loading, .analyzing: busyPanel
                 case .review: reviewPanel
-                case .translating, .done, .failed: resultPanel
+                case .translating, .done, .failed:
+                    ViewThatFits(in: .vertical) {
+                        resultPanel
+                        ScrollView { resultPanel.padding(.vertical, 12) }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .stateMotion(.reveal, value: model.stage)
             footer
         }
         .background(Palette.window)
-        .frame(minWidth: 560, minHeight: 460)
+        .frame(minWidth: 390, minHeight: 460)
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { model.handleDrop($0) }
     }
 
@@ -459,6 +470,7 @@ struct FileTranslationView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(dropTargeted ? Palette.accentSoft : Palette.surface))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropTargeted ? Palette.accent : Palette.inputLine, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
         .contentShape(Rectangle())
+        .stateMotion(.feedback, value: dropTargeted)
         .onTapGesture { model.chooseFile(from: window()) }
         .padding(24)
     }
@@ -473,13 +485,13 @@ struct FileTranslationView: View {
                  : L("会把标题、摘要、各级标题和部分段落发给模型，只请求一次。", "The title, abstract, headings and some paragraphs are sent to the model in one request."))
                 .font(.system(size: 12)).foregroundColor(Palette.textTertiary).multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, 24)
     }
 
     private var reviewPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 12) {
+                WrappingRow(spacing: 10) {
                     Text(L("翻译成", "Translate into")).font(.system(size: 13)).foregroundColor(Palette.textPrimary)
                     Picker("", selection: $model.target) {
                         ForEach(Languages.all) { language in
@@ -491,7 +503,6 @@ struct FileTranslationView: View {
                         Text(L("原文：\(detected.localName)（自动识别）", "Source: \(detected.localName) (detected)"))
                             .font(.system(size: 12)).foregroundColor(Palette.textTertiary)
                     }
-                    Spacer()
                 }
                 .padding(.top, 14)
 
@@ -554,7 +565,7 @@ struct FileTranslationView: View {
             Text(model.heading).font(.system(size: 17, weight: .semibold)).foregroundColor(Palette.textPrimary)
                 .multilineTextAlignment(.center).padding(.top, 10)
             if model.stage == .translating {
-                ProgressView(value: model.progress).progressViewStyle(.linear).frame(width: 360).padding(.top, 16)
+                ProgressView(value: model.progress).progressViewStyle(.linear).frame(maxWidth: 360).padding(.top, 16)
             }
             Text(model.detail).font(.system(size: 13)).foregroundColor(Palette.textSecondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true).textSelection(.enabled).padding(.top, 12)
@@ -563,7 +574,7 @@ struct FileTranslationView: View {
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).padding(.top, 10)
             }
             if model.stage == .done {
-                HStack(spacing: 10) {
+                WrappingRow(alignment: .center) {
                     Button(L("打开译文", "Open translation")) { model.openOutput() }.buttonStyle(PrimaryButtonStyle())
                     Button(L("在访达中显示", "Show in Finder")) { model.revealOutput() }.buttonStyle(SecondaryButtonStyle())
                     if model.result?.bilingualURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
@@ -573,13 +584,15 @@ struct FileTranslationView: View {
                 .padding(.top, 18)
             }
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, 24)
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text(model.stage == .review || model.stage == .translating ? model.serviceText : "")
-                .font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1)
+            if model.stage == .review || model.stage == .translating {
+                Text(model.serviceText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1)
+                    .help(model.serviceText)
+            }
             Spacer()
             switch model.stage {
             case .pick:
@@ -653,6 +666,7 @@ struct TranslateFileHeaderButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
         .help(L("翻译 PDF、Word、PPT、Excel 等文件 (⌘O)，也可以把文件拖进窗口", "Translate PDF, Word, PowerPoint, Excel and other files (⌘O); you can also drop a file on the window"))
         .accessibilityLabel(L("翻译文件", "Translate files"))

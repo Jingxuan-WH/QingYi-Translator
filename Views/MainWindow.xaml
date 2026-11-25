@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Translator.Views"
         Title="{v:T 轻译, En='QingYi Translator'}"
-        Width="980" Height="620" MinWidth="640" MinHeight="420"
+        Width="980" Height="620" MinWidth="390" MinHeight="420"
         WindowStartupLocation="Manual"
         Background="{DynamicResource WindowBrush}"
         Foreground="{DynamicResource TextPrimaryBrush}"
@@ -85,13 +85,13 @@
         <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1">
             <Grid Height="52" Margin="20,0,14,0">
                 <StackPanel Orientation="Horizontal">
-                    <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center">
+                    <Border x:Name="BrandMark" Width="28" Height="28" CornerRadius="8" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center">
                         <TextBlock Text="译" Foreground="White" FontSize="15" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <TextBlock Text="{v:T 轻译, En=QingYi}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"
+                    <TextBlock x:Name="BrandLabel" Text="{v:T 轻译, En=QingYi}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"
                                Margin="10,0,0,0" VerticalAlignment="Center"/>
-                    <Grid Margin="34,0,0,0">
+                    <Grid x:Name="TextTab" Margin="34,0,0,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE8C1;" FontFamily="{StaticResource IconFont}" FontSize="15"
                                        Foreground="{DynamicResource AccentTextBrush}" VerticalAlignment="Center"/>
@@ -117,6 +117,9 @@
                                     </StackPanel>
                                 </Border>
                                 <ControlTemplate.Triggers>
+                                    <Trigger Property="Tag" Value="compact">
+                                        <Setter TargetName="Label" Property="Visibility" Value="Collapsed"/>
+                                    </Trigger>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                         <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -168,6 +171,8 @@
                         <RowDefinition Height="52"/>
                         <RowDefinition Height="1"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition x:Name="CompactDividerRow" Height="0"/>
+                        <RowDefinition x:Name="CompactOutputRow" Height="0"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -194,10 +199,10 @@
                               SelectionChanged="TargetLangBox_SelectionChanged"/>
 
                     <Border Grid.Row="1" Grid.ColumnSpan="3" Background="{DynamicResource LineBrush}"/>
-                    <Border Grid.Row="2" Grid.Column="1" Background="{DynamicResource LineBrush}"/>
+                    <Border x:Name="PaneDivider" Grid.Row="2" Grid.Column="1" Background="{DynamicResource LineBrush}"/>
 
                     <!-- Source pane -->
-                    <Grid Grid.Row="2" Grid.Column="0">
+                    <Grid x:Name="SourcePane" Grid.Row="2" Grid.Column="0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
@@ -214,7 +219,9 @@
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="Collapsed"
                                 AutomationProperties.Name="{v:T 清空, En=Clear}" Click="ClearButton_Click"/>
                         <Grid Grid.Row="1" Height="44" Margin="22,0,10,0">
-                            <TextBlock x:Name="CharCountText" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}"/>
+                            <Button x:Name="UndoClearButton" HorizontalAlignment="Left" Visibility="Collapsed" Style="{StaticResource LinkButton}"
+                                    Content="{v:T '撤销清空', En='Undo clear'}" Click="UndoClearButton_Click"/>
+                            <TextBlock x:Name="CharCountText" IsHitTestVisible="False" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}"/>
                         </Grid>
                     </Grid>
 
@@ -231,13 +238,16 @@
                                      AutomationProperties.AutomationId="OutputBox" AutomationProperties.Name="{v:T 译文, En=Translation}"/>
                             <TextBlock x:Name="OutputPlaceholder" Margin="22,14,20,0" Text="{v:T 译文, En=Translation}" FontSize="18"
                                        Foreground="{DynamicResource TextTertiaryBrush}" IsHitTestVisible="False"/>
-                            <Canvas x:Name="LoadingTrack" Height="2" VerticalAlignment="Top" ClipToBounds="True" Visibility="Collapsed">
-                                <Rectangle Width="140" Height="2" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentTextBrush}">
-                                    <Rectangle.RenderTransform>
-                                        <TranslateTransform x:Name="LoadingShift"/>
-                                    </Rectangle.RenderTransform>
-                                </Rectangle>
-                            </Canvas>
+                            <Viewbox x:Name="LoadingTrack" Height="2" VerticalAlignment="Top" Stretch="Fill"
+                                     IsHitTestVisible="False" ClipToBounds="True" Visibility="Collapsed">
+                                <Canvas Width="500" Height="2" ClipToBounds="True">
+                                    <Rectangle Width="140" Height="2" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentTextBrush}">
+                                        <Rectangle.RenderTransform>
+                                            <TranslateTransform x:Name="LoadingShift"/>
+                                        </Rectangle.RenderTransform>
+                                    </Rectangle>
+                                </Canvas>
+                            </Viewbox>
 
                             <Border x:Name="ErrorPanel" Grid.Row="1" Margin="14,0,14,4" Padding="12,9" CornerRadius="8"
                                     Background="{DynamicResource ErrorSoftBrush}" Visibility="Collapsed">
@@ -257,9 +267,9 @@
                                            Foreground="{DynamicResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis"
                                            AutomationProperties.AutomationId="StatusText"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <Button Style="{StaticResource IconButton}" Content="&#xE72C;" FontSize="14"
+                                    <Button x:Name="ActionButton" Style="{StaticResource IconButton}" Content="&#xE72C;" FontSize="14"
                                             ToolTip="{v:T '整体重新翻译 (Ctrl+Enter)', En='Retranslate everything (Ctrl+Enter)'}"
-                                            AutomationProperties.AutomationId="RetranslateButton" AutomationProperties.Name="{v:T 重新翻译, En=Retranslate}"
+                                            AutomationProperties.AutomationId="RetranslateButton"
                                             Click="RetranslateButton_Click"/>
                                     <Button x:Name="CopyButton" Style="{StaticResource IconButton}" Content="&#xE8C8;" Margin="2,0,0,0"
                                             AutomationProperties.AutomationId="CopyButton" AutomationProperties.Name="{v:T 复制译文, En='Copy translation'}"
@@ -274,19 +284,22 @@
 
         <!-- Status bar -->
         <Grid Grid.Row="2" Height="28" Margin="26,0,26,8">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Background="Transparent" Cursor="Hand"
-                        ToolTip="{v:T 更改翻译服务, En='Change translation service'}" MouseLeftButtonUp="EngineStatus_MouseLeftButtonUp">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button HorizontalAlignment="Left" VerticalAlignment="Center" Style="{StaticResource LinkButton}"
+                    ToolTip="{v:T 更改翻译服务, En='Change translation service'}" Click="SettingsButton_Click">
+                <StackPanel Orientation="Horizontal">
                 <Ellipse x:Name="EngineDot" Width="7" Height="7" VerticalAlignment="Center"/>
                 <TextBlock x:Name="EngineText" Margin="8,0,0,0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
                            AutomationProperties.AutomationId="EngineText"/>
-            </StackPanel>
-            <TextBlock x:Name="ShortcutHintText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"/>
+                </StackPanel>
+            </Button>
+            <TextBlock Grid.Column="1" x:Name="ShortcutHintText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"/>
         </Grid>
 
         <!-- History drawer -->
         <Grid x:Name="HistoryOverlay" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed">
             <Border Background="{DynamicResource BackdropBrush}" MouseLeftButtonDown="HistoryBackdrop_MouseLeftButtonDown"/>
-            <Grid HorizontalAlignment="Right" Width="420" Margin="0,12,20,14">
+            <Grid x:Name="HistoryDrawer" HorizontalAlignment="Right" Width="420" Margin="0,12,20,14">
                 <Border CornerRadius="12" Background="{DynamicResource SurfaceBrush}">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="28" ShadowDepth="4" Direction="270" Opacity="0.18" Color="#1E2430"/>

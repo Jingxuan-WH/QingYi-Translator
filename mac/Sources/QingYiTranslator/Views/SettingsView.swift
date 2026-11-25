@@ -17,13 +17,14 @@ final class SettingsViewModel: ObservableObject {
     }
     private var providers: [String: ProviderConfig]
     private var editedKeys: [String: String] = [:]
-    @Published var apiKey = ""
+    @Published var apiKey = "" { didSet { if apiKey != oldValue { resetConnectionTest() } } }
     @Published var revealKey = false
-    @Published var baseUrl = ""
-    @Published var model = ""
+    @Published var baseUrl = "" { didSet { if baseUrl != oldValue { resetConnectionTest() } } }
+    @Published var model = "" { didSet { if model != oldValue { resetConnectionTest() } } }
     @Published var testResult = ""
     @Published var testResultColor = Palette.textSecondary
-    @Published var testing = false
+    @Published private(set) var testing = false
+    private var connectionTest: Task<Void, Never>?
 
     @Published var doubleCopyEnabled: Bool
     @Published var hotkeyEnabled: Bool { didSet { updateHotkeyStatus() } }
@@ -96,6 +97,7 @@ final class SettingsViewModel: ObservableObject {
     // ---------------- provider ----------------
 
     private func loadProviderFields(_ id: String) {
+        resetConnectionTest()
         let preset = ProviderCatalog.get(id)
         let config = providers[id] ?? ProviderConfig.fromPreset(preset)
         providers[id] = config
@@ -131,7 +133,19 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    private func resetConnectionTest() {
+        connectionTest?.cancel()
+        connectionTest = nil
+        testing = false
+        testResult = ""
+    }
+
     func testConnection() {
+        if testing {
+            resetConnectionTest()
+            setTestResult(L("已取消测试", "Test canceled"), Palette.textSecondary)
+            return
+        }
         var config = providers[currentProvider] ?? ProviderConfig.fromPreset(preset)
         config.baseUrl = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         config.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -140,7 +154,7 @@ final class SettingsViewModel: ObservableObject {
         testing = true
         setTestResult(L("正在连接…", "Connecting…"), Palette.textSecondary)
         let started = Date()
-        Task { [weak self] in
+        connectionTest = Task { [weak self] in
             var reply = ""
             do {
                 _ = try await Timeouts.run(seconds: 30) {
@@ -149,6 +163,7 @@ final class SettingsViewModel: ObservableObject {
                         reply += piece
                     }
                 }
+                guard !Task.isCancelled else { return }
                 var sample = reply.trimmingCharacters(in: .whitespacesAndNewlines)
                 if sample.count > 30 {
                     sample = String(sample.prefix(30)) + "…"
@@ -156,13 +171,17 @@ final class SettingsViewModel: ObservableObject {
                 let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
                 self?.setTestResult(L("✓ 连接成功（\(seconds) 秒）：\(sample)", "✓ Connected (\(seconds) s): \(sample)"), Palette.success)
             } catch let error as TranslationError {
+                guard !Task.isCancelled else { return }
                 self?.setTestResult(error.message, Palette.error)
             } catch is TimeoutError {
+                guard !Task.isCancelled else { return }
                 self?.setTestResult(L("连接超时，请检查网络和接口地址。", "Timed out. Please check your network and the base URL."), Palette.error)
             } catch {
+                guard !Task.isCancelled else { return }
                 Log.error("测试连接失败", error)
                 self?.setTestResult(L("测试失败：\(error.localizedDescription)", "Test failed: \(error.localizedDescription)"), Palette.error)
             }
+            self?.connectionTest = nil
             self?.testing = false
         }
     }
@@ -306,6 +325,7 @@ final class SettingsViewModel: ObservableObject {
 
     /// Puts the live-previewed language and theme back.
     func revertPreview() {
+        resetConnectionTest()
         if !saved {
             Loc.shared.apply(settings.uiLanguage)
             ThemeManager.apply(settings.theme)
@@ -334,7 +354,7 @@ struct SettingsView: View {
                     appearance
                     service
                     shortcuts
-                    permissions
+                    if model.doubleCopyEnabled || model.hotkeyEnabled { permissions }
                     LiveSettingsSection(draft: model.live)
                     preferences
                     general
@@ -355,7 +375,7 @@ struct SettingsView: View {
             .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
         }
         .background(Palette.window)
-        .frame(minWidth: 480, minHeight: 420)
+        .frame(minWidth: 390, minHeight: 420)
     }
 
     private var appearance: some View {
@@ -370,7 +390,7 @@ struct SettingsView: View {
                         Text("简体中文").tag(Loc.chineseCode)
                         Text("English").tag(Loc.englishCode)
                     }
-                    .labelsHidden().frame(width: 200)
+                    .labelsHidden().frame(minWidth: 110, idealWidth: 200, maxWidth: 200)
                 }
                 HStack {
                     Text(L("主题", "Theme")).font(.system(size: 13))
@@ -380,7 +400,7 @@ struct SettingsView: View {
                         Text(L("浅色", "Light")).tag(AppSettings.themeLight)
                         Text(L("深色", "Dark")).tag(AppSettings.themeDark)
                     }
-                    .labelsHidden().frame(width: 200)
+                    .labelsHidden().frame(minWidth: 110, idealWidth: 200, maxWidth: 200)
                 }
                 .padding(.top, 10)
             }
@@ -435,7 +455,7 @@ struct SettingsView: View {
                 FieldLabel(text: L("模型", "Model"))
                 TextField("", text: $model.model).formField()
                 if !model.preset.suggestedModels.isEmpty {
-                    HStack(spacing: 8) {
+                    WrappingRow {
                         ForEach(model.preset.suggestedModels, id: \.self) { name in
                             Button(name) { model.model = name }.buttonStyle(ChipButtonStyle())
                         }
@@ -445,8 +465,8 @@ struct SettingsView: View {
                 HintText(text: model.preset.modelHint.text)
 
                 HStack(alignment: .center, spacing: 12) {
-                    Button(L("测试连接", "Test connection")) { model.testConnection() }
-                        .buttonStyle(SecondaryButtonStyle()).disabled(model.testing)
+                    Button(model.testing ? L("取消测试", "Cancel test") : L("测试连接", "Test connection")) { model.testConnection() }
+                        .buttonStyle(SecondaryButtonStyle())
                     Text(model.testResult).font(.system(size: 12)).foregroundColor(model.testResultColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -460,17 +480,21 @@ struct SettingsView: View {
             SectionTitle(text: L("快捷键", "Shortcuts"))
             Card {
                 ToggleRow(title: L("按两次 ⌘C 翻译选中的文字", "Press ⌘C twice to translate the selection"), isOn: $model.doubleCopyEnabled)
-                HintText(text: L("与 DeepL 相同：选中文字后按住 ⌘，快速按两下 C。", "Like DeepL: select text, hold ⌘ and quickly press C twice."))
-                ToggleRow(title: L("使用快捷键翻译选中的文字", "Use a hotkey to translate the selection"), isOn: $model.hotkeyEnabled).padding(.top, 4)
-                HStack(spacing: 12) {
-                    Text(L("快捷键", "Hotkey")).font(.system(size: 13))
-                    HotkeyRecorder(text: model.hotkeyText, onFocusChange: model.hotkeyFocusChanged, onModifiers: model.hotkeyModifiersChanged,
-                                   onGesture: model.hotkeyRecorded, onClear: model.hotkeyCleared)
-                        .frame(width: 200, height: 30)
-                    Spacer()
+                if model.doubleCopyEnabled {
+                    HintText(text: L("选中文字后，按住 ⌘ 并连按两次 C。", "Select text, hold ⌘ and press C twice."))
                 }
-                .padding(.top, 10)
-                HintText(text: model.hotkeyStatus, color: model.hotkeyStatusIsError ? Palette.error : Palette.textTertiary)
+                ToggleRow(title: L("使用快捷键翻译选中的文字", "Use a hotkey to translate the selection"), isOn: $model.hotkeyEnabled).padding(.top, 4)
+                if model.hotkeyEnabled {
+                    HStack(spacing: 12) {
+                        Text(L("快捷键", "Hotkey")).font(.system(size: 13))
+                        HotkeyRecorder(text: model.hotkeyText, onFocusChange: model.hotkeyFocusChanged, onModifiers: model.hotkeyModifiersChanged,
+                                       onGesture: model.hotkeyRecorded, onClear: model.hotkeyCleared)
+                            .frame(width: 200, height: 30)
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+                    HintText(text: model.hotkeyStatus, color: model.hotkeyStatusIsError ? Palette.error : Palette.textTertiary)
+                }
             }
         }
     }

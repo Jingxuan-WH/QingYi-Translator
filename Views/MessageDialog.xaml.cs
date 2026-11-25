@@ -15,14 +15,22 @@ public partial class MessageDialog : Window
         MessageText.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PrimaryButton.Content = primary;
         if (danger)
+        {
             PrimaryButton.Style = (Style)FindResource("DangerButton");
+            PrimaryButton.IsDefault = false;
+            SecondaryButton.IsDefault = true;
+            Loaded += (_, _) => SecondaryButton.Focus();
+        }
         if (secondary is null)
             SecondaryButton.Visibility = Visibility.Collapsed;
         else
             SecondaryButton.Content = secondary;
 
         if (owner is { IsVisible: true })
+        {
             Owner = owner;
+            Width = Math.Clamp(owner.ActualWidth, 390, Width);
+        }
         else
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ThemeManager.Track(this, "SurfaceBrush");

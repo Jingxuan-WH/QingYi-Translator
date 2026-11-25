@@ -19,6 +19,17 @@ struct PaneTextViewTests {
         #expect(fixture.model.source == "Hello. new input")
     }
 
+    @Test func twoEditsBeforeNextRedrawKeepPendingNativeText() throws {
+        let fixture = try EditorFixture()
+        fixture.editor.insertText("A", replacementRange: NSRange(location: NSNotFound, length: 0))
+        fixture.editor.textStorage?.append(NSAttributedString(string: "B"))
+        fixture.model.output = "刷新译文"
+        fixture.refresh()
+        #expect(fixture.editor.string == "Hello.AB")
+        fixture.editor.didChangeText()
+        #expect(fixture.model.source == "Hello.AB")
+    }
+
     @Test func typingSurvivesTranslationRefreshes() throws {
         let fixture = try EditorFixture()
         for character in " Continue typing while translation streams." {

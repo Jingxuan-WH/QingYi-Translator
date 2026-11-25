@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Translator.Views"
         Title="{v:T 设置, En=Settings}"
-        Width="560" Height="680" MinWidth="480" MinHeight="420"
+        Width="560" Height="680" MinWidth="390" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource WindowBrush}"
@@ -26,7 +26,7 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="200"/>
+                            <ColumnDefinition Width="2*" MaxWidth="200"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -90,12 +90,12 @@
                         </ItemsControl>
                         <TextBlock x:Name="ModelHint" Style="{StaticResource HintText}"/>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <DockPanel Margin="0,16,0,0">
                             <Button x:Name="TestButton" Style="{StaticResource SecondaryButton}" Content="{v:T 测试连接, En='Test connection'}"
                                     AutomationProperties.AutomationId="TestButton" Click="TestButton_Click"/>
                             <TextBlock x:Name="TestResult" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12"
                                        TextWrapping="Wrap" MaxWidth="340" AutomationProperties.AutomationId="TestResult"/>
-                        </StackPanel>
+                        </DockPanel>
                     </StackPanel>
                 </Border>
 

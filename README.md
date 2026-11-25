@@ -68,7 +68,7 @@
 
 ### 3. 填入 Key
 
-第一次启动时会自动弹出设置窗口：粘贴 API Key → 点「测试连接」→ 看到“连接成功”后点「保存」。
+打开轻译后，点主窗口的「添加 API Key」，粘贴 Key，再点「测试连接」。看到“连接成功”后点「保存」。
 
 <img src="docs/images/settings.png" width="400" alt="设置窗口">
 
@@ -97,7 +97,7 @@ Mac 版是用 Swift 写的原生应用，支持 macOS 13 及以上，Apple 芯�
 
 1. 到 [Releases](https://github.com/Jingxuan-WH/QingYi-Translator/releases/latest) 下载 `QingYiTranslator-mac.zip`，解压后把 `QingYi Translator.app` 拖进“应用程序”文件夹。
 2. 第一次打开时，macOS 会提示“无法验证开发者”（程序没有 Apple 开发者签名）：在应用上**右键 → 打开**，再点一次“打开”即可，以后就能正常双击了。如果提示“已损坏”，在终端里运行一次 `xattr -dr com.apple.quarantine "/Applications/QingYi Translator.app"`。
-3. 和 Windows 版一样，第一次启动会弹出设置窗口：选服务商、粘贴 API Key、点“测试连接”、保存。
+3. 和 Windows 版一样，点主窗口的「添加 API Key」即可选服务商、粘贴 API Key、测试连接并保存。
 
 ### 取词和权限
 

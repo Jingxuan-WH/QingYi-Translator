@@ -30,6 +30,8 @@ public partial class SettingsWindow : Window
     private string _currentProvider;
     private HotkeyGesture? _hotkey;
     private Func<string>? _testResult;
+    private CancellationTokenSource? _testConnection;
+    private bool _syncingKey;
     private Func<string>? _updateStatus;
     private bool _loading = true;
     private bool _saved;
@@ -52,6 +54,10 @@ public partial class SettingsWindow : Window
         ProviderBox.ItemsSource = _providerOptions;
         ProviderBox.SelectedItem = _providerOptions.First(option => option.Id == _currentProvider);
         LoadProviderFields(_currentProvider);
+        BaseUrlBox.TextChanged += (_, _) => ResetConnectionTest();
+        ModelBox.TextChanged += (_, _) => ResetConnectionTest();
+        KeyBox.PasswordChanged += (_, _) => { if (!_syncingKey) ResetConnectionTest(); };
+        KeyPlainBox.TextChanged += (_, _) => { if (!_syncingKey) ResetConnectionTest(); };
 
         DoubleCopyToggle.IsChecked = settings.DoubleCopyEnabled;
         HotkeyToggle.IsChecked = settings.HotkeyEnabled;
@@ -107,6 +113,7 @@ public partial class SettingsWindow : Window
 
     private void RefreshLocalizedText()
     {
+        RefreshTestButton();
         TestResult.Text = _testResult?.Invoke() ?? "";
         UpdateStatus.Text = _updateStatus?.Invoke() ?? "";
         CurrentVersionText.Text = Loc.T($"当前版本 {UpdateService.CurrentVersionText}", $"Current version {UpdateService.CurrentVersionText}");
@@ -116,6 +123,7 @@ public partial class SettingsWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        ResetConnectionTest();
         Loc.Changed -= OnInterfaceLanguageChanged;
         if (!_saved)
         {
@@ -130,6 +138,7 @@ public partial class SettingsWindow : Window
     {
         if (_loading || ProviderBox.SelectedItem is not ChoiceOption option || option.Id == _currentProvider)
             return;
+        ResetConnectionTest();
         StoreProviderFields(_currentProvider);
         _currentProvider = option.Id;
         LoadProviderFields(option.Id);
@@ -181,10 +190,12 @@ public partial class SettingsWindow : Window
     private void RevealKeyButton_Click(object sender, RoutedEventArgs e)
     {
         bool reveal = RevealKeyButton.IsChecked == true;
+        _syncingKey = true;
         if (reveal)
             KeyPlainBox.Text = KeyBox.Password;
         else
             KeyBox.Password = KeyPlainBox.Text;
+        _syncingKey = false;
         KeyPlainBox.Visibility = reveal ? Visibility.Visible : Visibility.Collapsed;
         KeyBox.Visibility = reveal ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -203,26 +214,39 @@ public partial class SettingsWindow : Window
 
     private async void TestButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_testConnection is not null)
+        {
+            ResetConnectionTest();
+            SetTestResult(() => Loc.T("已取消测试", "Test cancelled"), "TextSecondaryBrush");
+            return;
+        }
         var config = _providers[_currentProvider].Clone();
         config.BaseUrl = BaseUrlBox.Text.Trim();
         config.Model = ModelBox.Text.Trim();
         config.ApiKey = GetKeyText();
 
-        TestButton.IsEnabled = false;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _testConnection = timeout;
+        RefreshTestButton();
         SetTestResult(() => Loc.T("正在连接…", "Connecting…"), "TextSecondaryBrush");
         var watch = Stopwatch.StartNew();
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var reply = new StringBuilder();
             await new TranslationClient().TranslateAsync(ProviderCatalog.Get(_currentProvider), config, "",
                 new TranslationRequest("Hello, world!", Languages.English, Languages.SimplifiedChinese, []),
                 piece => reply.Append(piece), timeout.Token);
+            if (_testConnection != timeout)
+                return;
             string sample = reply.ToString().Trim();
             if (sample.Length > 30)
                 sample = sample[..30] + "…";
             double seconds = watch.Elapsed.TotalSeconds;
             SetTestResult(() => Loc.T($"✓ 连接成功（{seconds:0.0} 秒）：{sample}", $"✓ Connected ({seconds:0.0} s): {sample}"), "SuccessBrush");
+        }
+        catch (Exception) when (_testConnection != timeout)
+        {
+            // A newer test or an edit owns the feedback now.
         }
         catch (TranslationException ex)
         {
@@ -239,9 +263,25 @@ public partial class SettingsWindow : Window
         }
         finally
         {
-            TestButton.IsEnabled = true;
+            if (_testConnection == timeout)
+            {
+                _testConnection = null;
+                RefreshTestButton();
+            }
         }
     }
+
+    private void ResetConnectionTest()
+    {
+        var previous = _testConnection;
+        _testConnection = null;
+        previous?.Cancel();
+        RefreshTestButton();
+        SetTestResult(null, "TextSecondaryBrush");
+    }
+
+    private void RefreshTestButton() => TestButton.Content = _testConnection is null
+        ? Loc.T("测试连接", "Test connection") : Loc.T("取消测试", "Cancel test");
 
     private void SetTestResult(Func<string>? text, string brushKey)
     {

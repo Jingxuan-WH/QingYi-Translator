@@ -110,11 +110,7 @@ public partial class App : Application
 
         bool startHidden = e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
         if (!startHidden)
-        {
             TranslatorWindow.Show();
-            if (Settings.ActivePreset.RequiresApiKey && string.IsNullOrWhiteSpace(Settings.Active.ApiKey))
-                Dispatcher.InvokeAsync(OpenSettings, DispatcherPriority.ApplicationIdle);
-        }
         StartUpdateChecks();
     }
 
@@ -242,6 +238,7 @@ public partial class App : Application
     /// </summary>
     internal void OpenFileTranslation(string? path = null, bool choose = false)
     {
+        bool openedForPicker = _fileWindow is null;
         if (_fileWindow is null)
         {
             var window = new FileTranslationWindow(Settings, Glossary);
@@ -263,8 +260,8 @@ public partial class App : Application
         }
         if (path is not null)
             _fileWindow.OpenFile(path);
-        else if (choose)
-            _fileWindow.ChooseFile();
+        else if (choose && !_fileWindow.ChooseFile() && openedForPicker)
+            _fileWindow.Close();
     }
 
     internal void NotifyMinimizedToTray()

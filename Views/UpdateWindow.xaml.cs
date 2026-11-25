@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using Translator.Core;
 using Translator.Platform;
 
@@ -18,6 +19,12 @@ public partial class UpdateWindow : Window
         _release = release;
         _app = app;
         InitializeComponent();
+        SourceInitialized += (_, _) =>
+        {
+            if (Owner is { ActualWidth: > 0 } owner)
+                Width = Math.Clamp(owner.ActualWidth, MinWidth, Width);
+            DockPanel.SetDock(PageButton, Width < 500 ? Dock.Top : Dock.Left);
+        };
         ThemeManager.Track(this, "SurfaceBrush");
         RefreshText();
         Loc.Changed += RefreshText;
@@ -112,7 +119,7 @@ public partial class UpdateWindow : Window
 
     private void SetBusy(bool busy)
     {
-        ProgressPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        Motion.Show(ProgressPanel, busy);
         Progress.Value = 0;
         ProgressText.Text = busy ? Loc.T("正在连接…", "Connecting…") : "";
         InstallButton.IsEnabled = !busy;
@@ -123,7 +130,7 @@ public partial class UpdateWindow : Window
     private void ShowError(string message)
     {
         ErrorText.Text = message;
-        ErrorText.Visibility = Visibility.Visible;
+        Motion.Show(ErrorText, true);
     }
 
     // IsCancel closes the dialog after this; during a download OnClosing keeps it open and only the download stops.

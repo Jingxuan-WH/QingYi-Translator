@@ -144,21 +144,22 @@ struct UpdateView: View {
             if let error = model.error {
                 Text(error).font(.system(size: 12)).foregroundColor(Palette.error).fixedSize(horizontal: false, vertical: true).padding(.top, 10)
             }
-            HStack {
+            WrappingRow(alignment: .trailing) {
                 Button(L("在网页中查看", "View on GitHub")) { model.openPage() }.buttonStyle(LinkButtonStyle())
-                Spacer()
                 Button(L("跳过此版本", "Skip this version")) { model.skip(close: close) }.buttonStyle(SecondaryButtonStyle()).disabled(model.busy)
                 Button(model.busy ? L("取消", "Cancel") : L("以后再说", "Later")) {
                     if model.busy { model.cancelDownload() } else { close() }
                 }
-                .buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction).padding(.leading, 8)
+                .buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
                 Button(L("立即更新", "Update now")) { model.install(close: close) }
-                    .buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.defaultAction).disabled(model.busy).padding(.leading, 8)
+                    .buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.defaultAction).disabled(model.busy)
             }
             .padding(.top, 14)
         }
+        .stateMotion(.reveal, value: model.busy)
+        .stateMotion(.reveal, value: model.error != nil)
         .padding(20)
         .background(Palette.surface)
-        .frame(minWidth: 440, minHeight: 320)
+        .frame(minWidth: 390, minHeight: 320)
     }
 }

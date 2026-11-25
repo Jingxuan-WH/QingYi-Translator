@@ -115,9 +115,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             NSApp.setActivationPolicy(.accessory)
         } else {
             showMainWindow()
-            if settings.activePreset.requiresApiKey && settings.apiKey(for: settings.activeProvider).isEmpty {
-                DispatchQueue.main.async { self.openSettings() }
-            }
         }
         startUpdateChecks()
 
@@ -181,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.minSize = NSSize(width: 640, height: 420)
+        window.minSize = NSSize(width: 390, height: 420)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.level = settings.topmost ? .floating : .normal
@@ -241,10 +238,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard let self, event.window == mainWindow else { return event }
             let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
             if event.keyCode == 36 && flags == [.command] { // ⌘↩
-                model.translate(force: true)
+                model.performTranslationAction()
                 return nil
             }
             if event.keyCode == 53 && flags.isEmpty { // Esc
+                if (mainWindow.firstResponder as? NSTextView)?.hasMarkedText() == true { return event }
                 if model.isHistoryOpen {
                     model.isHistoryOpen = false
                 } else {
@@ -452,7 +450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             showMainWindow()
         }
         let vm = SettingsViewModel(settings: settings, app: self)
-        let window = makeWindow(title: L("设置", "Settings"), size: NSSize(width: 560, height: 680), minSize: NSSize(width: 480, height: 420), over: mainWindow)
+        let window = makeWindow(title: L("设置", "Settings"), size: NSSize(width: 560, height: 680), minSize: NSSize(width: 390, height: 420), over: mainWindow)
         window.contentView = NSHostingView(rootView: SettingsView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
             .environmentObject(Loc.shared))
         settingsWindow = window
@@ -474,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             owner = mainWindow
         }
         let vm = GlossaryViewModel(glossary: glossary, enabled: settings.glossaryEnabled)
-        let window = makeWindow(title: L("术语表", "Glossary"), size: NSSize(width: 560, height: 520), minSize: NSSize(width: 480, height: 360), over: owner)
+        let window = makeWindow(title: L("术语表", "Glossary"), size: NSSize(width: 560, height: 520), minSize: NSSize(width: 390, height: 360), over: owner)
         window.contentView = NSHostingView(rootView: GlossaryView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
             .environmentObject(Loc.shared))
         glossaryWindow = window
@@ -501,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             owner = mainWindow
         }
         let vm = UpdateViewModel(release: release, app: self)
-        let window = makeWindow(title: L("轻译更新", "QingYi Translator Update"), size: NSSize(width: 480, height: 400), minSize: NSSize(width: 440, height: 320), over: owner)
+        let window = makeWindow(title: L("轻译更新", "QingYi Translator Update"), size: NSSize(width: 480, height: 400), minSize: NSSize(width: 390, height: 320), over: owner)
         window.contentView = NSHostingView(rootView: UpdateView(model: vm, close: { [weak window] in window?.close() }).environmentObject(Loc.shared))
         updateWindow = window
         updateModel = vm
@@ -511,6 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     /// Translates a whole file in its own window. `url` starts with that file; `choose` asks for one first.
     func openFileTranslation(url: URL? = nil, choose: Bool = false) {
+        let openedForPicker = fileWindow == nil
         let vm: FileTranslationViewModel
         if let window = fileWindow, let model = fileModel {
             vm = model
@@ -519,7 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             vm = FileTranslationViewModel(settings: settings, glossary: glossary)
             vm.openSettings = { [weak self] in self?.openSettings() }
             NSApp.setActivationPolicy(.regular)
-            let window = makeWindow(title: L("翻译文件", "Translate a File"), size: NSSize(width: 720, height: 620), minSize: NSSize(width: 560, height: 460),
+            let window = makeWindow(title: L("翻译文件", "Translate a File"), size: NSSize(width: 720, height: 620), minSize: NSSize(width: 390, height: 460),
                                     over: mainWindow.isVisible ? mainWindow : nil)
             window.contentView = NSHostingView(rootView: FileTranslationView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
                 .environmentObject(Loc.shared))
@@ -532,7 +531,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             vm.open(url)
         } else if choose {
             // After the window is up, so the open panel appears over it.
-            DispatchQueue.main.async { [weak self] in vm.chooseFile(from: self?.fileWindow) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.fileModel === vm, let window = self.fileWindow else { return }
+                vm.chooseFile(from: window) {
+                    if openedForPicker && vm.stage == .pick { window.close() }
+                }
+            }
         }
     }
 
@@ -700,7 +704,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(retranslateAction) || menuItem.action == #selector(toggleHistoryAction) {
+        if menuItem.action == #selector(retranslateAction), let model {
+            menuItem.title = model.translationActionTitle
+            return mainWindow?.isKeyWindow == true && !model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if menuItem.action == #selector(toggleHistoryAction) {
             return mainWindow?.isKeyWindow == true
         }
         if menuItem.action == #selector(togglePinAction) {
@@ -713,7 +721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func openGlossaryAction() { openGlossary(from: NSApp.keyWindow) }
     @objc private func translateFileAction() { openFileTranslation(choose: true) }
     @objc private func toggleHistoryAction() { model.toggleHistory() }
-    @objc private func retranslateAction() { model.translate(force: true) }
+    @objc private func retranslateAction() { model.performTranslationAction() }
     @objc private func togglePinAction() { model.togglePin() }
     @objc private func showMainWindowAction() { showMainWindow() }
     @objc private func openLiveAction() { live.show() }
