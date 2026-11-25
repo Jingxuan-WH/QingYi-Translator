@@ -9,7 +9,7 @@
                 <DockPanel Margin="0,12,0,6">
                     <Button x:Name="ModelsFolderButton" DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
                             Content="{v:T 打开模型文件夹, En='Open models folder'}" Click="ModelsFolderButton_Click"/>
-                    <TextBlock Text="{v:T 语音识别模型, En='Speech recognition model'}" FontSize="13"/>
+                    <TextBlock Text="{v:T 语音识别模型, En='Speech recognition model'}" FontSize="13" TextWrapping="Wrap"/>
                 </DockPanel>
                 <ComboBox x:Name="ModelBox" Style="{StaticResource FormComboBox}" DisplayMemberPath="DisplayName"
                           AutomationProperties.AutomationId="LiveModelBox" AutomationProperties.Name="{v:T 语音识别模型, En='Speech recognition model'}"

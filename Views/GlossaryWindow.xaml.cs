@@ -73,6 +73,7 @@ public partial class GlossaryWindow : Window
     public GlossaryWindow(Glossary glossary, bool enabled)
     {
         InitializeComponent();
+        SizeChanged += (_, _) => DockPanel.SetDock(SaveActions, ActualWidth < 500 ? Dock.Bottom : Dock.Right);
         foreach (var entry in glossary.Entries)
             AddRow(new GlossaryRow(entry.Source, entry.Target));
         EnsureBlankRowAtEnd();

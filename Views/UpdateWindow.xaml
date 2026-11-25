@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Translator.Views"
         Title="{v:T 软件更新, En='Software update'}"
-        Width="540" SizeToContent="Height" ResizeMode="NoResize"
+        Width="540" MinWidth="390" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource SurfaceBrush}"
@@ -33,9 +33,9 @@
         </StackPanel>
         <Border Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="24,12">
             <DockPanel>
-                <Button x:Name="PageButton" DockPanel.Dock="Left" Style="{StaticResource LinkButton}" FontSize="13" VerticalAlignment="Center"
+                <Button HorizontalAlignment="Left" x:Name="PageButton" DockPanel.Dock="Left" Style="{StaticResource LinkButton}" FontSize="13" VerticalAlignment="Center"
                         Content="{v:T 在网页中查看, En='View on GitHub'}" Click="PageButton_Click"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <WrapPanel HorizontalAlignment="Right">
                     <Button x:Name="SkipButton" Style="{StaticResource SecondaryButton}" Content="{v:T 跳过此版本, En='Skip this version'}"
                             AutomationProperties.AutomationId="SkipUpdateButton" Click="SkipButton_Click"/>
                     <Button x:Name="LaterButton" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" IsCancel="True"
@@ -43,7 +43,7 @@
                     <Button x:Name="InstallButton" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" IsDefault="True"
                             Content="{v:T 立即更新, En='Update now'}"
                             AutomationProperties.AutomationId="InstallUpdateButton" Click="InstallButton_Click"/>
-                </StackPanel>
+                </WrapPanel>
             </DockPanel>
         </Border>
     </StackPanel>

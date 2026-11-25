@@ -80,6 +80,7 @@ public partial class FileTranslationWindow : Window
         _glossary = glossary;
         _target = Languages.Find(settings.TargetLanguage) ?? Languages.SimplifiedChinese;
         InitializeComponent();
+        SizeChanged += (_, _) => DockPanel.SetDock(FileActions, ActualWidth < 540 ? Dock.Bottom : Dock.Right);
 
         _targetOptions = Languages.All.Select(language => new LanguageOption(language)).ToList();
         TargetBox.ItemsSource = _targetOptions;

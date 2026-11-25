@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using Translator.Core;
 using Translator.Platform;
 
@@ -18,6 +19,12 @@ public partial class UpdateWindow : Window
         _release = release;
         _app = app;
         InitializeComponent();
+        SourceInitialized += (_, _) =>
+        {
+            if (Owner is { ActualWidth: > 0 } owner)
+                Width = Math.Clamp(owner.ActualWidth, MinWidth, Width);
+            DockPanel.SetDock(PageButton, Width < 500 ? Dock.Top : Dock.Left);
+        };
         ThemeManager.Track(this, "SurfaceBrush");
         RefreshText();
         Loc.Changed += RefreshText;

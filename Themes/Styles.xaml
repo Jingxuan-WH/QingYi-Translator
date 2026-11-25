@@ -512,7 +512,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <ContentPresenter VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <TextBlock Text="{TemplateBinding Content}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0"/>
                         <Border x:Name="Track" Grid.Column="1" Width="40" Height="20" CornerRadius="10" VerticalAlignment="Center"
                                 Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SwitchOffBorderBrush}" BorderThickness="1">
                             <Ellipse x:Name="Knob" Width="12" Height="12" Fill="{DynamicResource SwitchOffKnobBrush}"

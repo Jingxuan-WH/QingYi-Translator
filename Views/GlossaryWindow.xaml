@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:Translator.Views"
         Title="{v:T 术语表, En=Glossary}"
-        Width="660" Height="620" MinWidth="520" MinHeight="420"
+        Width="660" Height="620" MinWidth="390" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource WindowBrush}"
@@ -94,7 +94,7 @@
                 <Button Style="{StaticResource LinkButton}" FontSize="13" Margin="16,0,0,0" Content="{v:T 导出…, En='Export…'}"
                         AutomationProperties.AutomationId="ExportButton" Click="ExportButton_Click"/>
             </StackPanel>
-            <Grid Width="240" HorizontalAlignment="Left">
+            <Grid MaxWidth="240" Margin="0,0,10,0">
                 <TextBox x:Name="SearchBox" Style="{StaticResource FormTextBox}" Padding="30,0,8,0"
                          AutomationProperties.AutomationId="GlossarySearchBox" AutomationProperties.Name="{v:T 搜索术语, En='Search terms'}"
                          TextChanged="SearchBox_TextChanged"/>
@@ -145,7 +145,7 @@
         <Border Grid.Row="4" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}"
                 BorderThickness="0,1,0,0" Padding="24,12">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <StackPanel x:Name="SaveActions" HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Style="{StaticResource SecondaryButton}" Content="{v:T 取消, En=Cancel}" IsCancel="True"
                             AutomationProperties.AutomationId="GlossaryCancelButton"/>
                     <Button Style="{StaticResource PrimaryButton}" Content="{v:T 保存, En=Save}" Margin="10,0,0,0"
