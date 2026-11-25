@@ -17,13 +17,14 @@ final class SettingsViewModel: ObservableObject {
     }
     private var providers: [String: ProviderConfig]
     private var editedKeys: [String: String] = [:]
-    @Published var apiKey = ""
+    @Published var apiKey = "" { didSet { if apiKey != oldValue { resetConnectionTest() } } }
     @Published var revealKey = false
-    @Published var baseUrl = ""
-    @Published var model = ""
+    @Published var baseUrl = "" { didSet { if baseUrl != oldValue { resetConnectionTest() } } }
+    @Published var model = "" { didSet { if model != oldValue { resetConnectionTest() } } }
     @Published var testResult = ""
     @Published var testResultColor = Palette.textSecondary
-    @Published var testing = false
+    @Published private(set) var testing = false
+    private var connectionTest: Task<Void, Never>?
 
     @Published var doubleCopyEnabled: Bool
     @Published var hotkeyEnabled: Bool { didSet { updateHotkeyStatus() } }
@@ -96,6 +97,7 @@ final class SettingsViewModel: ObservableObject {
     // ---------------- provider ----------------
 
     private func loadProviderFields(_ id: String) {
+        resetConnectionTest()
         let preset = ProviderCatalog.get(id)
         let config = providers[id] ?? ProviderConfig.fromPreset(preset)
         providers[id] = config
@@ -131,7 +133,19 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    private func resetConnectionTest() {
+        connectionTest?.cancel()
+        connectionTest = nil
+        testing = false
+        testResult = ""
+    }
+
     func testConnection() {
+        if testing {
+            resetConnectionTest()
+            setTestResult(L("已取消测试", "Test canceled"), Palette.textSecondary)
+            return
+        }
         var config = providers[currentProvider] ?? ProviderConfig.fromPreset(preset)
         config.baseUrl = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         config.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -140,7 +154,7 @@ final class SettingsViewModel: ObservableObject {
         testing = true
         setTestResult(L("正在连接…", "Connecting…"), Palette.textSecondary)
         let started = Date()
-        Task { [weak self] in
+        connectionTest = Task { [weak self] in
             var reply = ""
             do {
                 _ = try await Timeouts.run(seconds: 30) {
@@ -149,6 +163,7 @@ final class SettingsViewModel: ObservableObject {
                         reply += piece
                     }
                 }
+                guard !Task.isCancelled else { return }
                 var sample = reply.trimmingCharacters(in: .whitespacesAndNewlines)
                 if sample.count > 30 {
                     sample = String(sample.prefix(30)) + "…"
@@ -156,13 +171,17 @@ final class SettingsViewModel: ObservableObject {
                 let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
                 self?.setTestResult(L("✓ 连接成功（\(seconds) 秒）：\(sample)", "✓ Connected (\(seconds) s): \(sample)"), Palette.success)
             } catch let error as TranslationError {
+                guard !Task.isCancelled else { return }
                 self?.setTestResult(error.message, Palette.error)
             } catch is TimeoutError {
+                guard !Task.isCancelled else { return }
                 self?.setTestResult(L("连接超时，请检查网络和接口地址。", "Timed out. Please check your network and the base URL."), Palette.error)
             } catch {
+                guard !Task.isCancelled else { return }
                 Log.error("测试连接失败", error)
                 self?.setTestResult(L("测试失败：\(error.localizedDescription)", "Test failed: \(error.localizedDescription)"), Palette.error)
             }
+            self?.connectionTest = nil
             self?.testing = false
         }
     }
@@ -306,6 +325,7 @@ final class SettingsViewModel: ObservableObject {
 
     /// Puts the live-previewed language and theme back.
     func revertPreview() {
+        resetConnectionTest()
         if !saved {
             Loc.shared.apply(settings.uiLanguage)
             ThemeManager.apply(settings.theme)
@@ -445,8 +465,8 @@ struct SettingsView: View {
                 HintText(text: model.preset.modelHint.text)
 
                 HStack(alignment: .center, spacing: 12) {
-                    Button(L("测试连接", "Test connection")) { model.testConnection() }
-                        .buttonStyle(SecondaryButtonStyle()).disabled(model.testing)
+                    Button(model.testing ? L("取消测试", "Cancel test") : L("测试连接", "Test connection")) { model.testConnection() }
+                        .buttonStyle(SecondaryButtonStyle())
                     Text(model.testResult).font(.system(size: 12)).foregroundColor(model.testResultColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }

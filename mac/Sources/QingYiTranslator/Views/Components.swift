@@ -274,8 +274,8 @@ struct PaneTextView: NSViewRepresentable {
         textView.onCommandReturn = onCommandReturn
         textView.onEscape = onEscape
         textView.onFileDrop = onFileDrop
-        textView.isEditable = isEditable
-        textView.isSelectable = true
+        if textView.isEditable != isEditable { textView.isEditable = isEditable }
+        if !textView.isSelectable { textView.isSelectable = true }
         if textView.font?.pointSize != fontSize {
             textView.font = NSFont.systemFont(ofSize: fontSize)
         }
