@@ -27,7 +27,10 @@ public partial class MessageDialog : Window
             SecondaryButton.Content = secondary;
 
         if (owner is { IsVisible: true })
+        {
             Owner = owner;
+            Width = Math.Clamp(owner.ActualWidth, 390, Width);
+        }
         else
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ThemeManager.Track(this, "SurfaceBrush");

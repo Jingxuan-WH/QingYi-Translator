@@ -254,7 +254,7 @@ public partial class MainWindow : Window
         ShowTarget(target);
 
         var preset = _settings.ActivePreset;
-        var config = _settings.Active;
+        var config = _settings.Active.Clone();
         string contextKey = BuildContextKey(promptSource, target, preset, config);
         string requestKey = contextKey + '\u001F' + text;
         if (!force && requestKey == _lastRequestKey)
@@ -281,30 +281,45 @@ public partial class MainWindow : Window
         SetStatus(() => full ? Loc.T("正在翻译…", "Translating…") : Loc.T("正在翻译新增内容…", "Translating the new part…"));
         SetBusy(true);
         var watch = Stopwatch.StartNew();
-        // SSE bursts can contain many pieces in a single UI turn. Append them together,
-        // without building a new copy of the entire document for each piece.
+        // Read and decode SSE off the UI thread. A burst schedules one UI update,
+        // regardless of how many tokens arrive before the next display refresh.
         var pending = new System.Text.StringBuilder();
         var flushTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        void QueueOutput(string delta)
+        {
+            bool schedule;
+            lock (pending)
+            {
+                schedule = pending.Length == 0;
+                pending.Append(delta);
+            }
+            if (schedule)
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (_translation == cts && !flushTimer.IsEnabled)
+                        flushTimer.Start();
+                }, DispatcherPriority.Background);
+        }
         void Flush()
         {
             flushTimer.Stop();
-            if (pending.Length != 0 && cts == _translation)
-                AppendOutput(pending.ToString());
-            pending.Clear();
+            string delta;
+            lock (pending)
+            {
+                delta = pending.ToString();
+                pending.Clear();
+            }
+            if (delta.Length != 0 && cts == _translation)
+                AppendOutput(delta);
         }
         flushTimer.Tick += (_, _) => Flush();
         try
         {
             var glossary = _settings.GlossaryEnabled ? _glossary.Match(plan.Remainder) : [];
             var request = new TranslationRequest(plan.Remainder, promptSource, target, plan.Context, glossary);
-            var result = await _client.TranslateAsync(preset, config, _settings.ExtraInstructions, request, delta =>
-            {
-                if (cts != _translation)
-                    return;
-                pending.Append(delta);
-                if (!flushTimer.IsEnabled)
-                    flushTimer.Start();
-            }, cts.Token);
+            string instructions = _settings.ExtraInstructions;
+            var result = await Task.Run(() => _client.TranslateAsync(preset, config, instructions, request,
+                QueueOutput, cts.Token), cts.Token);
             Flush();
             if (cts == _translation)
             {

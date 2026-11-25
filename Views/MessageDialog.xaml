@@ -16,12 +16,12 @@
                        Foreground="{DynamicResource TextSecondaryBrush}" AutomationProperties.AutomationId="MessageText"/>
         </StackPanel>
         <Border Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="24,12">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <WrapPanel HorizontalAlignment="Right">
                 <Button x:Name="SecondaryButton" Style="{StaticResource SecondaryButton}" IsCancel="True"
                         AutomationProperties.AutomationId="DialogSecondaryButton"/>
                 <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" IsDefault="True" Margin="10,0,0,0"
                         AutomationProperties.AutomationId="DialogPrimaryButton" Click="PrimaryButton_Click"/>
-            </StackPanel>
+            </WrapPanel>
         </Border>
     </StackPanel>
 </Window>

@@ -7,18 +7,30 @@ struct LiveView: View {
     @EnvironmentObject var loc: Loc
     var window: () -> NSWindow?
 
+    @State private var headerHeight: CGFloat = 0
+
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            if let banner = model.banner {
-                bannerView(banner)
+        GeometryReader { geometry in
+            // Leave the transcript visible even when permissions need a long explanation.
+            let headerLimit = floor(geometry.size.height * 0.53)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        toolbar
+                        if let banner = model.banner {
+                            bannerView(banner)
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                }
+                .frame(height: headerHeight > 0 ? min(headerHeight, headerLimit) : headerLimit)
+                LiveTranscriptList(model: model)
+                    .background(Palette.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
+                    .padding(EdgeInsets(top: 12, leading: 18, bottom: 0, trailing: 18))
+                footer
             }
-            LiveTranscriptList(model: model)
-                .background(Palette.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1))
-                .padding(EdgeInsets(top: 12, leading: 18, bottom: 0, trailing: 18))
-            footer
         }
         .stateMotion(.reveal, value: model.banner != nil)
         .background(Palette.window)
