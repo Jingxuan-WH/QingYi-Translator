@@ -111,7 +111,7 @@ struct MainView: View {
     private func translatorCard(compact: Bool) -> some View {
         let panes = compact ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
         return VStack(spacing: 0) {
-            languageBar.frame(height: 52)
+            if compact { compactLanguageBar.frame(height: 44) } else { languageBar.frame(height: 52) }
             Rectangle().fill(Palette.line).frame(height: 1)
             panes {
                 sourcePane
@@ -125,6 +125,34 @@ struct MainView: View {
         .shadow(color: Palette.shadow, radius: 11, x: 0, y: 2)
     }
 
+    private var compactLanguageBar: some View {
+        HStack(spacing: 6) {
+            compactLanguageMenu(isSource: true)
+            IconButton(symbol: "arrow.left.arrow.right", help: L("交换语言", "Swap languages")) { model.swapLanguages() }
+            compactLanguageMenu(isSource: false)
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func compactLanguageMenu(isSource: Bool) -> some View {
+        let title = isSource ? model.sourceLabel : model.target.localName
+        return Menu {
+            ForEach(Array(languageEntries(isSource: isSource).enumerated()), id: \.offset) { _, entry in
+                if entry.isSeparator { Divider() }
+                else {
+                    Button(action: entry.action) {
+                        if entry.isSelected { Label(entry.title, systemImage: "checkmark") } else { Text(entry.title) }
+                    }
+                }
+            }
+        } label: {
+            Text(title).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .menuStyle(.borderlessButton)
+        .accessibilityLabel((isSource ? L("源语言", "Source language") : L("目标语言", "Target language")) + " " + title)
+        .help(title)
+    }
+
     private var languageBar: some View {
         HStack(spacing: 0) {
             HStack { languageMenu(isSource: true).padding(.leading, 10); Spacer() }.frame(maxWidth: .infinity)
@@ -133,7 +161,7 @@ struct MainView: View {
         .overlay(IconButton(symbol: "arrow.left.arrow.right", help: L("交换语言", "Swap languages")) { model.swapLanguages() })
     }
 
-    private func languageMenu(isSource: Bool) -> some View {
+    private func languageEntries(isSource: Bool) -> [MenuEntry] {
         var entries: [MenuEntry] = []
         if isSource {
             entries.append(MenuEntry(L("检测语言", "Detect language"), isSelected: model.source == nil) { model.selectSource(nil) })
@@ -145,7 +173,11 @@ struct MainView: View {
                 if isSource { model.selectSource(language) } else { model.selectTarget(language) }
             })
         }
-        return LanguageMenuButton(title: isSource ? model.sourceLabel : model.target.localName, entries: entries,
+        return entries
+    }
+
+    private func languageMenu(isSource: Bool) -> some View {
+        LanguageMenuButton(title: isSource ? model.sourceLabel : model.target.localName, entries: languageEntries(isSource: isSource),
                                   accessibilityLabel: isSource ? L("源语言", "Source language") : L("目标语言", "Target language"))
             .fixedSize()
     }
@@ -179,7 +211,7 @@ struct MainView: View {
                 }
             }
             HStack {
-                if model.clearedSource != nil && model.sourceText.isEmpty {
+                if model.canUndoClear {
                     Button(L("撤销清空", "Undo clear")) { model.restoreClearedSource() }.buttonStyle(LinkButtonStyle())
                 }
                 Text(model.characterCountText).font(.system(size: 12).monospacedDigit()).foregroundColor(Palette.textTertiary)

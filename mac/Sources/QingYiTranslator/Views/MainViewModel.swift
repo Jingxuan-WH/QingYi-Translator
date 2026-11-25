@@ -19,11 +19,17 @@ final class MainViewModel: ObservableObject {
     private var subscriptions = Set<AnyCancellable>()
 
     private(set) var sourceGeneration = 0
-    private(set) var clearedSource: String?
+    private struct ClearedInput {
+        let source: String
+        let output: String
+        let completedRequestKey: String?
+    }
+    private var clearedInput: ClearedInput?
+    var canUndoClear: Bool { clearedInput != nil && sourceText.isEmpty }
     @Published var sourceText = "" {
         didSet {
             guard sourceText != oldValue else { return }
-            if !sourceText.isEmpty { clearedSource = nil }
+            if !sourceText.isEmpty { clearedInput = nil }
             updateCharacterCount()
             onSourceChanged()
         }
@@ -493,13 +499,32 @@ final class MainViewModel: ObservableObject {
     }
 
     func restoreClearedSource() {
-        guard sourceText.isEmpty, let clearedSource else { return }
-        replaceSource(clearedSource)
+        guard sourceText.isEmpty, let clearedInput else { return }
+        let languages = resolveLanguages(clearedInput.source)
+        let context = buildContextKey(promptSource: languages.promptSource, target: languages.target,
+                                      preset: settings.activePreset, config: settings.active)
+        let key = context + "\u{1F}" + clearedInput.source
+        if key == clearedInput.completedRequestKey {
+            restoringHistory = true
+            replaceSource(clearedInput.source)
+            restoringHistory = false
+            detected = languages.detected
+            target = languages.target
+            replaceOutput(clearedInput.output)
+            lastRequestKey = key
+            incremental.commit(contextKey: context, plan: .full(clearedInput.source), remainderTranslation: clearedInput.output)
+            setStatus { L("已恢复译文", "Translation restored") }
+        } else {
+            replaceSource(clearedInput.source)
+        }
         focusSource()
     }
 
     func clearSource() {
-        if !sourceText.isEmpty { clearedSource = sourceText }
+        if !sourceText.isEmpty {
+            let completedKey = !isBusy && errorMessage == nil && !outputText.isEmpty ? lastRequestKey : nil
+            clearedInput = ClearedInput(source: sourceText, output: outputText, completedRequestKey: completedKey)
+        }
         replaceSource("")
         focusSource()
     }

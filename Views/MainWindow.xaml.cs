@@ -40,7 +40,8 @@ public partial class MainWindow : Window
     private Func<string>? _status;       // re-evaluated when the interface language changes
     private bool _copied;
     private bool _historyOpen;
-    private string? _clearedText;
+    private sealed record ClearedInput(string Text, string? RequestKey, string? Output, Func<string>? Status);
+    private ClearedInput? _clearedInput;
     private int _copyFeedbackVersion;
     private ReleaseInfo? _availableUpdate;
 
@@ -712,7 +713,7 @@ public partial class MainWindow : Window
 
     private void SourceBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _clearedText = null;
+        _clearedInput = null;
         UndoClearButton.Visibility = Visibility.Collapsed;
         UpdateSourceChrome();
         ActionButton.Visibility = _translation is not null || !string.IsNullOrWhiteSpace(SourceBox.Text) ? Visibility.Visible : Visibility.Collapsed;
@@ -733,20 +734,35 @@ public partial class MainWindow : Window
 
     private void ClearButton_Click(object sender, RoutedEventArgs e)
     {
-        string previous = SourceBox.Text;
+        var previous = new ClearedInput(SourceBox.Text, _lastRequestKey,
+            _translation is null && _lastRequestKey is not null ? OutputBox.Text : null, _status);
         SourceBox.SelectAll();
         SourceBox.SelectedText = "";
-        _clearedText = previous;
+        _clearedInput = previous;
         UndoClearButton.Visibility = Visibility.Visible;
         SourceBox.Focus();
     }
 
     private void UndoClearButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_clearedText is not { } text || SourceBox.Text.Length != 0)
+        if (_clearedInput is not { } saved || SourceBox.Text.Length != 0)
             return;
-        SourceBox.SelectedText = text;
-        SourceBox.CaretIndex = text.Length;
+        SourceBox.SelectedText = saved.Text;
+        SourceBox.CaretIndex = saved.Text.Length;
+        var (detected, promptSource, target) = ResolveLanguages(saved.Text);
+        string contextKey = BuildContextKey(promptSource, target, _settings.ActivePreset, _settings.Active);
+        if (saved.Output is { Length: > 0 } output && saved.RequestKey == contextKey + '\u001F' + saved.Text)
+        {
+            _debounce.Stop();
+            _detected = detected;
+            UpdateDetectLabel();
+            ShowTarget(target);
+            OutputBox.Text = output;
+            _lastRequestKey = saved.RequestKey;
+            _incremental.Commit(contextKey, IncrementalPlan.Full(saved.Text), output);
+            SetStatus(saved.Status);
+            UpdateOutputChrome();
+        }
         SourceBox.Focus();
     }
 
