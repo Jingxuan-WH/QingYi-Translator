@@ -378,12 +378,12 @@ public partial class FileTranslationWindow : Window
     private void SetStage(Stage stage)
     {
         _stage = stage;
-        PickPanel.Visibility = stage == Stage.Pick ? Visibility.Visible : Visibility.Collapsed;
-        BusyPanel.Visibility = stage is Stage.Loading or Stage.Analyzing ? Visibility.Visible : Visibility.Collapsed;
-        ReviewPanel.Visibility = stage == Stage.Review ? Visibility.Visible : Visibility.Collapsed;
-        ResultPanel.Visibility = stage is Stage.Translating or Stage.Done or Stage.Failed ? Visibility.Visible : Visibility.Collapsed;
+        Motion.Show(PickPanel, stage == Stage.Pick);
+        Motion.Show(BusyPanel, stage is Stage.Loading or Stage.Analyzing);
+        Motion.Show(ReviewPanel, stage == Stage.Review);
+        Motion.Show(ResultPanel, stage is Stage.Translating or Stage.Done or Stage.Failed);
         TranslateBar.Visibility = stage == Stage.Translating ? Visibility.Visible : Visibility.Collapsed;
-        OpenButtons.Visibility = stage == Stage.Done ? Visibility.Visible : Visibility.Collapsed;
+        Motion.Show(OpenButtons, stage == Stage.Done);
         ChangeFileButton.IsEnabled = stage != Stage.Translating;
         if (stage == Stage.Translating)
         {

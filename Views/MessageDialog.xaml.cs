@@ -15,7 +15,12 @@ public partial class MessageDialog : Window
         MessageText.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PrimaryButton.Content = primary;
         if (danger)
+        {
             PrimaryButton.Style = (Style)FindResource("DangerButton");
+            PrimaryButton.IsDefault = false;
+            SecondaryButton.IsDefault = true;
+            Loaded += (_, _) => SecondaryButton.Focus();
+        }
         if (secondary is null)
             SecondaryButton.Visibility = Visibility.Collapsed;
         else

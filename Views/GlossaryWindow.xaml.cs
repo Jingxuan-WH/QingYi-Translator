@@ -66,6 +66,7 @@ public partial class GlossaryWindow : Window
 {
     private readonly ObservableCollection<GlossaryRow> _rows = [];
     private readonly ICollectionView _view;
+    private readonly Stack<(GlossaryRow Row, int Index)> _deletedRows = new();
     private Func<string>? _message;
     private bool _showingIncompleteWarning;
 
@@ -159,10 +160,21 @@ public partial class GlossaryWindow : Window
 
     // ---------------- editing ----------------
 
+    private void UndoDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_deletedRows.TryPop(out var deleted))
+            return;
+        AddRow(deleted.Row, Math.Clamp(deleted.Index, 0, _rows.Count - 1));
+        EnsureBlankRowAtEnd();
+        UndoDeleteButton.Visibility = _deletedRows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void DeleteRow_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: GlossaryRow row })
+        if (sender is FrameworkElement { Tag: GlossaryRow row } && !row.IsBlank)
         {
+            _deletedRows.Push((row, _rows.IndexOf(row)));
+            UndoDeleteButton.Visibility = Visibility.Visible;
             row.PropertyChanged -= OnRowChanged;
             _rows.Remove(row);
             EnsureBlankRowAtEnd();

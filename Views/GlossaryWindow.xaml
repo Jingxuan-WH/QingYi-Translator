@@ -151,6 +151,8 @@
                     <Button Style="{StaticResource PrimaryButton}" Content="{v:T 保存, En=Save}" Margin="10,0,0,0"
                             AutomationProperties.AutomationId="GlossarySaveButton" Click="SaveButton_Click"/>
                 </StackPanel>
+                <Button x:Name="UndoDeleteButton" DockPanel.Dock="Left" Visibility="Collapsed" Style="{StaticResource LinkButton}"
+                        Content="{v:T 撤销删除, En='Undo deletion'}" Margin="0,0,10,0" Click="UndoDelete_Click"/>
                 <TextBlock x:Name="MessageText" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" Margin="0,0,12,0"
                            AutomationProperties.AutomationId="GlossaryMessage"/>
             </DockPanel>

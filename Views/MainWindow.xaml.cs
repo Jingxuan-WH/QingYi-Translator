@@ -39,6 +39,8 @@ public partial class MainWindow : Window
     private string? _lastRequestKey;
     private Func<string>? _status;       // re-evaluated when the interface language changes
     private bool _copied;
+    private bool _historyOpen;
+    private string? _clearedText;
     private int _copyFeedbackVersion;
     private ReleaseInfo? _availableUpdate;
 
@@ -76,16 +78,43 @@ public partial class MainWindow : Window
             if (_settings.MainWindowBounds is { } saved)
                 WindowUtil.TryRestorePlacement(this, saved);
         };
+        SystemParameters.StaticPropertyChanged += MotionPreferenceChanged;
+        Closed += (_, _) => SystemParameters.StaticPropertyChanged -= MotionPreferenceChanged;
         Closing += OnClosing;
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewDragOver += OnPreviewDragOver;
         PreviewDrop += OnPreviewDrop;
         Loc.Changed += OnInterfaceLanguageChanged;
 
+        IsVisibleChanged += (_, _) => RefreshLoadingAnimation();
+        SizeChanged += (_, e) => { if (e.WidthChanged) UpdateCompactLayout(); };
+        UpdateCompactLayout();
         UpdateSourceChrome();
         UpdateOutputChrome();
         UpdateHistoryChrome();
         RefreshSettingsDisplay();
+    }
+
+    private void UpdateCompactLayout()
+    {
+        bool compact = ActualWidth > 0 && ActualWidth < 780;
+        bool stacked = ActualWidth > 0 && ActualWidth < 675;
+        bool smallest = ActualWidth > 0 && ActualWidth < 540;
+        HistoryDrawer.MaxWidth = Math.Max(0, (ActualWidth > 0 ? ActualWidth : Width) - 36);
+        BrandMark.Visibility = BrandLabel.Visibility = smallest ? Visibility.Collapsed : Visibility.Visible;
+        TranslateFileButton.Tag = smallest ? "compact" : null;
+        TranslateFileButton.Margin = new Thickness(smallest ? 0 : 22, 0, 0, 0);
+        CompactOutputRow.Height = stacked ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        CompactDividerRow.Height = new GridLength(stacked ? 1 : 0);
+        Grid.SetColumnSpan(SourcePane, stacked ? 3 : 1);
+        Grid.SetRow(OutputPane, stacked ? 4 : 2);
+        Grid.SetColumn(OutputPane, stacked ? 0 : 2);
+        Grid.SetColumnSpan(OutputPane, stacked ? 3 : 1);
+        Grid.SetRow(PaneDivider, stacked ? 3 : 2);
+        Grid.SetColumn(PaneDivider, stacked ? 0 : 1);
+        Grid.SetColumnSpan(PaneDivider, stacked ? 3 : 1);
+        TextTab.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        ShortcutHintText.Visibility = compact && App.ShortcutError is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private static App App => (App)Application.Current;
@@ -139,8 +168,8 @@ public partial class MainWindow : Window
     {
         var preset = _settings.ActivePreset;
         var config = _settings.Active;
-        string? problem = string.IsNullOrWhiteSpace(config.Model) ? Loc.T("未设置模型", "No model set")
-            : preset.RequiresApiKey && string.IsNullOrWhiteSpace(config.ApiKey) ? Loc.T("未设置 API Key", "No API key")
+        string? problem = string.IsNullOrWhiteSpace(config.Model) ? Loc.T("设置模型", "Set up model")
+            : preset.RequiresApiKey && string.IsNullOrWhiteSpace(config.ApiKey) ? Loc.T("添加 API Key", "Add API key")
             : null;
         EngineText.Text = $"{preset.DisplayName} · {problem ?? config.Model}";
         EngineDot.SetResourceReference(Shape.FillProperty, problem is null ? "SuccessBrush" : "WarningBrush");
@@ -251,11 +280,31 @@ public partial class MainWindow : Window
         SetStatus(() => full ? Loc.T("正在翻译…", "Translating…") : Loc.T("正在翻译新增内容…", "Translating the new part…"));
         SetBusy(true);
         var watch = Stopwatch.StartNew();
+        // SSE bursts can contain many pieces in a single UI turn. Append them together,
+        // without building a new copy of the entire document for each piece.
+        var pending = new System.Text.StringBuilder();
+        var flushTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        void Flush()
+        {
+            flushTimer.Stop();
+            if (pending.Length != 0 && cts == _translation)
+                AppendOutput(pending.ToString());
+            pending.Clear();
+        }
+        flushTimer.Tick += (_, _) => Flush();
         try
         {
             var glossary = _settings.GlossaryEnabled ? _glossary.Match(plan.Remainder) : [];
             var request = new TranslationRequest(plan.Remainder, promptSource, target, plan.Context, glossary);
-            var result = await _client.TranslateAsync(preset, config, _settings.ExtraInstructions, request, AppendOutput, cts.Token);
+            var result = await _client.TranslateAsync(preset, config, _settings.ExtraInstructions, request, delta =>
+            {
+                if (cts != _translation)
+                    return;
+                pending.Append(delta);
+                if (!flushTimer.IsEnabled)
+                    flushTimer.Start();
+            }, cts.Token);
+            Flush();
             if (cts == _translation)
             {
                 _incremental.Commit(contextKey, plan, result.Text);
@@ -283,6 +332,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            Flush();
             if (cts == _translation)
             {
                 _translation = null;
@@ -350,7 +400,8 @@ public partial class MainWindow : Window
     private void AppendOutput(string delta)
     {
         OutputBox.AppendText(delta);
-        UpdateOutputChrome();
+        if (CopyButton.Visibility != Visibility.Visible)
+            CopyButton.Visibility = Visibility.Visible;
     }
 
     private void FailTranslation(string message, bool needsSettings)
@@ -359,7 +410,7 @@ public partial class MainWindow : Window
         SetStatus(null);
         ErrorText.Text = message;
         ErrorActionButton.Visibility = needsSettings ? Visibility.Visible : Visibility.Collapsed;
-        ErrorPanel.Visibility = Visibility.Visible;
+        Motion.Show(ErrorPanel, true);
     }
 
     private void HideError() => ErrorPanel.Visibility = Visibility.Collapsed;
@@ -395,25 +446,41 @@ public partial class MainWindow : Window
 
     private void SetBusy(bool busy)
     {
-        if (busy)
+        LoadingTrack.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        RefreshLoadingAnimation();
+        UpdateOutputChrome();
+    }
+
+    private void MotionPreferenceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SystemParameters.ClientAreaAnimation) or nameof(SystemParameters.HighContrast))
+            Dispatcher.InvokeAsync(RefreshLoadingAnimation);
+    }
+
+    private void RefreshLoadingAnimation()
+    {
+        LoadingShift.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, null);
+        if (_translation is not null && IsVisible && Motion.Enabled)
         {
             LoadingTrack.Visibility = Visibility.Visible;
             double width = Math.Max(OutputPane.ActualWidth, 200);
             var sweep = new DoubleAnimation(-140, width, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
             LoadingShift.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, sweep);
         }
-        else
-        {
-            LoadingShift.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, null);
-            LoadingTrack.Visibility = Visibility.Collapsed;
-        }
-        UpdateOutputChrome();
     }
 
     private void UpdateOutputChrome()
     {
-        bool busy = LoadingTrack.Visibility == Visibility.Visible;
-        OutputPlaceholder.Visibility = OutputBox.Text.Length == 0 && !busy ? Visibility.Visible : Visibility.Collapsed;
+        bool busy = _translation is not null;
+        bool hasOutput = OutputBox.Text.Length != 0;
+        CopyButton.Visibility = hasOutput ? Visibility.Visible : Visibility.Collapsed;
+        ActionButton.Visibility = busy || !string.IsNullOrWhiteSpace(SourceBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        string action = busy ? Loc.T("停止翻译", "Stop translating")
+            : hasOutput ? Loc.T("重新翻译", "Retranslate") : Loc.T("开始翻译", "Translate");
+        ActionButton.Content = busy ? "■" : hasOutput ? "" : "";
+        ActionButton.ToolTip = action + " (Ctrl+Enter)";
+        System.Windows.Automation.AutomationProperties.SetName(ActionButton, action);
+        OutputPlaceholder.Visibility = !hasOutput && !busy ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateSourceChrome()
@@ -493,19 +560,30 @@ public partial class MainWindow : Window
 
     // ---------------- history ----------------
 
-    private bool IsHistoryOpen => HistoryOverlay.Visibility == Visibility.Visible;
+    private bool IsHistoryOpen => _historyOpen;
 
     private void SetHistoryOpen(bool open)
     {
         if (IsHistoryOpen == open)
             return;
-        HistoryOverlay.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        _historyOpen = open;
+        double opacity = HistoryOverlay.IsVisible ? HistoryOverlay.Opacity : 0;
+        HistoryOverlay.Visibility = Visibility.Visible;
+        HistoryOverlay.IsHitTestVisible = open;
+        HistoryOverlay.IsEnabled = open;
+        Motion.Fade(HistoryOverlay, opacity, open ? 1 : 0, () =>
+        {
+            if (!_historyOpen)
+                HistoryOverlay.Visibility = Visibility.Collapsed;
+        });
         HistoryButton.IsChecked = open;
         if (open)
         {
             UpdateHistoryChrome();
             HistorySearchBox.Focus();
         }
+        else if (IsVisible)
+            SourceBox.Focus();
     }
 
     // Checked/Unchecked rather than Click, so screen readers and other UI Automation clients can open the panel too.
@@ -623,6 +701,7 @@ public partial class MainWindow : Window
         UpdateSourceChrome();
         UpdatePinIcon();
         UpdateCopyButton();
+        UpdateOutputChrome();
         UpdateUpdateButton();
         _historyView.Refresh(); // time and language labels of the entries
         UpdateHistoryChrome();
@@ -633,7 +712,10 @@ public partial class MainWindow : Window
 
     private void SourceBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        _clearedText = null;
+        UndoClearButton.Visibility = Visibility.Collapsed;
         UpdateSourceChrome();
+        ActionButton.Visibility = _translation is not null || !string.IsNullOrWhiteSpace(SourceBox.Text) ? Visibility.Visible : Visibility.Collapsed;
         if (_restoringHistory)
             return;
         if (string.IsNullOrWhiteSpace(SourceBox.Text))
@@ -651,20 +733,52 @@ public partial class MainWindow : Window
 
     private void ClearButton_Click(object sender, RoutedEventArgs e)
     {
-        SourceBox.Clear();
+        string previous = SourceBox.Text;
+        SourceBox.SelectAll();
+        SourceBox.SelectedText = "";
+        _clearedText = previous;
+        UndoClearButton.Visibility = Visibility.Visible;
         SourceBox.Focus();
     }
 
-    private void RetranslateButton_Click(object sender, RoutedEventArgs e) => _ = TranslateAsync(force: true);
+    private void UndoClearButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_clearedText is not { } text || SourceBox.Text.Length != 0)
+            return;
+        SourceBox.SelectedText = text;
+        SourceBox.CaretIndex = text.Length;
+        SourceBox.Focus();
+    }
+
+    private void RetranslateButton_Click(object sender, RoutedEventArgs e) => TranslateOrStop();
+
+    private void TranslateOrStop()
+    {
+        if (_translation is null)
+        {
+            _ = TranslateAsync(force: true);
+            return;
+        }
+        _debounce.Stop();
+        CancelTranslation();
+        _lastRequestKey = null;
+        SetStatus(() => Loc.T("已停止翻译", "Translation stopped"));
+    }
 
     private async void CopyButton_Click(object sender, RoutedEventArgs e)
     {
         string text = OutputBox.Text;
-        if (text.Length == 0 || !ClipboardUtil.TrySetText(text))
+        if (text.Length == 0)
             return;
+        if (!ClipboardUtil.TrySetText(text))
+        {
+            SetStatus(() => Loc.T("剪贴板正忙，请再试一次", "Clipboard is busy. Try copying again."));
+            return;
+        }
         int version = ++_copyFeedbackVersion;
         _copied = true;
         UpdateCopyButton();
+        Motion.Fade(CopyButton, 0.55, 1);
         await Task.Delay(1500);
         if (version != _copyFeedbackVersion)
             return;
@@ -731,14 +845,12 @@ public partial class MainWindow : Window
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => App.OpenSettings();
 
-    private void EngineStatus_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => App.OpenSettings();
-
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
         {
             e.Handled = true;
-            _ = TranslateAsync(force: true);
+            TranslateOrStop();
         }
         else if (e.Key == Key.H && Keyboard.Modifiers == ModifierKeys.Control)
         {

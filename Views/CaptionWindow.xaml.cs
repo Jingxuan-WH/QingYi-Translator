@@ -21,8 +21,9 @@ public partial class CaptionWindow : Window
         _settings = settings;
         InitializeComponent();
         ApplyFontSize();
-        MouseEnter += (_, _) => Tools.Opacity = 1;
-        MouseLeave += (_, _) => Tools.Opacity = 0;
+        MouseEnter += (_, _) => UpdateTools();
+        MouseLeave += (_, _) => UpdateTools();
+        IsKeyboardFocusWithinChanged += (_, _) => UpdateTools();
         SourceInitialized += (_, _) =>
         {
             if (settings.Live.CaptionBounds is not { } saved || !WindowUtil.TryRestorePlacement(this, saved))
@@ -48,6 +49,13 @@ public partial class CaptionWindow : Window
     {
         block.Text = text ?? "";
         block.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void UpdateTools()
+    {
+        bool show = IsMouseOver || IsKeyboardFocusWithin;
+        Tools.IsHitTestVisible = show;
+        Motion.Fade(Tools, Tools.Opacity, show ? 1 : 0);
     }
 
     private void ApplyFontSize()

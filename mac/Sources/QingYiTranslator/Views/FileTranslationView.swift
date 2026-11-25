@@ -132,7 +132,8 @@ final class FileTranslationViewModel: ObservableObject {
         load(url)
     }
 
-    func chooseFile(from window: NSWindow?) {
+    func chooseFile(from window: NSWindow?, onCancel: (() -> Void)? = nil) {
+        guard let window, window.attachedSheet == nil else { return }
         if refuseWhileTranslating() {
             return
         }
@@ -144,8 +145,13 @@ final class FileTranslationViewModel: ObservableObject {
         if let folder = fileURL?.deletingLastPathComponent() {
             panel.directoryURL = folder
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        load(url)
+        panel.beginSheetModal(for: window) { [weak self] response in
+            if response == .OK, let url = panel.url {
+                self?.open(url)
+            } else {
+                onCancel?()
+            }
+        }
     }
 
     private func refuseWhileTranslating() -> Bool {
@@ -417,6 +423,7 @@ struct FileTranslationView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .stateMotion(.reveal, value: model.stage)
             footer
         }
         .background(Palette.window)
@@ -459,6 +466,7 @@ struct FileTranslationView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(dropTargeted ? Palette.accentSoft : Palette.surface))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropTargeted ? Palette.accent : Palette.inputLine, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
         .contentShape(Rectangle())
+        .stateMotion(.feedback, value: dropTargeted)
         .onTapGesture { model.chooseFile(from: window()) }
         .padding(24)
     }
@@ -653,6 +661,7 @@ struct TranslateFileHeaderButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
         .help(L("翻译 PDF、Word、PPT、Excel 等文件 (⌘O)，也可以把文件拖进窗口", "Translate PDF, Word, PowerPoint, Excel and other files (⌘O); you can also drop a file on the window"))
         .accessibilityLabel(L("翻译文件", "Translate files"))

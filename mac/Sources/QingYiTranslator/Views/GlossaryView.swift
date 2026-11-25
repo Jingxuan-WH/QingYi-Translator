@@ -47,6 +47,9 @@ final class GlossaryViewModel: ObservableObject {
     private(set) var entries: [GlossaryEntry] = []
     private(set) var saved = false
 
+    @Published private var deletedRows: [(row: GlossaryRow, index: Int)] = []
+    var canUndoDeletion: Bool { !deletedRows.isEmpty }
+
     private var rowSubscriptions: [UUID: AnyCancellable] = [:]
     private var showingIncompleteWarning = false
 
@@ -113,11 +116,19 @@ final class GlossaryViewModel: ObservableObject {
     // ---------------- editing ----------------
 
     func delete(_ row: GlossaryRow) {
+        guard !row.isBlank, let index = rows.firstIndex(where: { $0.id == row.id }) else { return }
+        deletedRows.append((row, index))
         remove(row)
         ensureBlankRowAtEnd()
         if showingIncompleteWarning && !rows.contains(where: \.flagged) {
             setMessage("")
         }
+    }
+
+    func undoDeletion() {
+        guard let deleted = deletedRows.popLast() else { return }
+        add(deleted.row, at: min(deleted.index, max(0, rows.count - 1)))
+        ensureBlankRowAtEnd()
     }
 
     /// Return moves to the next line (like a spreadsheet); on the last line it starts a new term.
@@ -288,6 +299,9 @@ struct GlossaryView: View {
                 .padding(.horizontal, 20).padding(.bottom, 10)
             }
             HStack {
+                if model.canUndoDeletion {
+                    Button(L("撤销删除", "Undo deletion")) { model.undoDeletion() }.buttonStyle(LinkButtonStyle())
+                }
                 Text(model.message).font(.system(size: 12)).foregroundColor(model.messageColor).lineLimit(2)
                 Spacer()
                 Button(L("取消", "Cancel")) { close() }.buttonStyle(SecondaryButtonStyle()).keyboardShortcut(.cancelAction)
@@ -325,6 +339,7 @@ struct GlossaryRowView: View {
             IconButton(symbol: "trash", help: L("删除", "Delete"), size: 26, fontSize: 12) { onDelete() }
                 .opacity(hovering && !row.isBlank ? 1 : 0)
         }
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
     }
 

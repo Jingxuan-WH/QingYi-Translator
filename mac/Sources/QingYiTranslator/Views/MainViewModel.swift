@@ -18,10 +18,24 @@ final class MainViewModel: ObservableObject {
     private let incremental = IncrementalCache()
     private var subscriptions = Set<AnyCancellable>()
 
+    private(set) var sourceGeneration = 0
+    private(set) var clearedSource: String?
     @Published var sourceText = "" {
-        didSet { if sourceText != oldValue { onSourceChanged() } }
+        didSet {
+            guard sourceText != oldValue else { return }
+            if !sourceText.isEmpty { clearedSource = nil }
+            updateCharacterCount()
+            onSourceChanged()
+        }
     }
-    @Published var outputText = ""
+    @Published private(set) var outputText = ""
+    // Within one generation the stream only appends. A replacement starts another generation.
+    private(set) var outputGeneration = 0
+
+    private func replaceOutput(_ text: String) {
+        outputGeneration &+= 1
+        outputText = text
+    }
     @Published private(set) var statusText = ""
     @Published private(set) var errorMessage: String?
     @Published private(set) var errorNeedsSettings = false
@@ -55,6 +69,8 @@ final class MainViewModel: ObservableObject {
 
     private var debounceTask: Task<Void, Never>?
     private var translationTask: Task<Void, Never>?
+    private var outputFlushTask: Task<Void, Never>?
+    private var pendingOutput = ""
     private var translationId = 0
     private var lastRequestKey: String?
     private var status: (() -> String)?
@@ -98,7 +114,7 @@ final class MainViewModel: ObservableObject {
             source = nil
             settings.sourceLanguage = Languages.autoCode
         }
-        sourceText = text
+        replaceSource(text)
         focusSource()
         translate(force: false)
     }
@@ -108,8 +124,8 @@ final class MainViewModel: ObservableObject {
     func refreshSettingsDisplay() {
         let preset = settings.activePreset
         let config = settings.active
-        let problem: String? = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? L("未设置模型", "No model set")
-            : preset.requiresApiKey && settings.apiKey(for: settings.activeProvider).isEmpty ? L("未设置 API Key", "No API key")
+        let problem: String? = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? L("设置模型", "Set up model")
+            : preset.requiresApiKey && settings.apiKey(for: settings.activeProvider).isEmpty ? L("添加 API Key", "Add API key")
             : nil
         engineText = "\(preset.displayName.text) · \(problem ?? config.model)"
         engineOk = problem == nil
@@ -147,6 +163,20 @@ final class MainViewModel: ObservableObject {
 
     // ---------------- translation ----------------
 
+    var translationActionTitle: String {
+        if isBusy { return L("停止翻译", "Stop translation") }
+        return outputText.isEmpty ? L("翻译", "Translate") : L("重新翻译", "Retranslate")
+    }
+
+    func performTranslationAction() {
+        guard isBusy else { translate(force: true); return }
+        debounceTask?.cancel()
+        debounceTask = nil
+        cancelTranslation()
+        lastRequestKey = nil
+        setStatus { L("已停止翻译", "Translation stopped") }
+    }
+
     func translate(force: Bool) {
         debounceTask?.cancel()
         debounceTask = nil
@@ -182,14 +212,14 @@ final class MainViewModel: ObservableObject {
         cancelTranslation()
         hideError()
         if plan.nothingNew {
-            outputText = MainViewModel.trimEnd(plan.reusedTranslation)
+            replaceOutput(MainViewModel.trimEnd(plan.reusedTranslation))
             incremental.commit(contextKey: contextKey, plan: plan, remainderTranslation: "")
             return
         }
 
         translationId += 1
         let id = translationId
-        outputText = plan.reusedTranslation
+        replaceOutput(plan.reusedTranslation)
         let full = plan.isFull
         setStatus { full ? L("正在翻译…", "Translating…") : L("正在翻译新增内容…", "Translating the new part…") }
         isBusy = true
@@ -204,9 +234,10 @@ final class MainViewModel: ObservableObject {
                 let result = try await client.translate(preset: preset, config: config, apiKey: apiKey, extraInstructions: extra,
                                                         request: request) { [weak self] delta in
                     guard let self, self.translationId == id else { return }
-                    self.outputText += delta
+                    self.queueOutput(delta)
                 }
                 guard translationId == id else { return }
+                flushOutput()
                 incremental.commit(contextKey: contextKey, plan: plan, remainderTranslation: result.text)
                 let elapsed = Date().timeIntervalSince(started)
                 let hits = glossaryHits.count
@@ -227,6 +258,7 @@ final class MainViewModel: ObservableObject {
                 }
             }
             if translationId == id {
+                flushOutput()
                 translationTask = nil
                 isBusy = false
             }
@@ -291,8 +323,28 @@ final class MainViewModel: ObservableObject {
         statusText = status?() ?? ""
     }
 
+    // Network chunks often arrive several at a time. Publish at most one batch
+    // per display interval, but flush immediately when a request finishes or stops.
+    private func queueOutput(_ delta: String) {
+        pendingOutput += delta
+        guard outputFlushTask == nil else { return }
+        outputFlushTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
+            self?.flushOutput()
+        }
+    }
+
+    private func flushOutput() {
+        outputFlushTask?.cancel()
+        outputFlushTask = nil
+        guard !pendingOutput.isEmpty else { return }
+        outputText += pendingOutput
+        pendingOutput = ""
+    }
+
     private func cancelTranslation() {
         guard let task = translationTask else { return }
+        flushOutput()
         task.cancel()
         translationTask = nil
         translationId += 1
@@ -303,7 +355,7 @@ final class MainViewModel: ObservableObject {
         cancelTranslation()
         lastRequestKey = nil
         incremental.clear()
-        outputText = ""
+        replaceOutput("")
         hideError()
         setStatus(nil)
         detected = nil
@@ -366,7 +418,7 @@ final class MainViewModel: ObservableObject {
         let translation = outputText
         if !translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             restoringHistory = true
-            sourceText = translation
+            replaceSource(translation)
             restoringHistory = false
         }
         translate(force: false)
@@ -408,7 +460,7 @@ final class MainViewModel: ObservableObject {
         cancelTranslation()
         debounceTask?.cancel()
         restoringHistory = true
-        sourceText = entry.sourceText
+        replaceSource(entry.sourceText)
         restoringHistory = false
 
         let target = Languages.find(entry.targetLanguage) ?? preferredTarget
@@ -422,7 +474,7 @@ final class MainViewModel: ObservableObject {
         self.target = target
 
         hideError()
-        outputText = entry.translatedText
+        replaceOutput(entry.translatedText)
         setStatus { L("来自翻译历史 · \(entry.timeText)", "From history · \(entry.timeText)") }
 
         let contextKey = buildContextKey(promptSource: source, target: target, preset: settings.activePreset, config: settings.active)
@@ -435,8 +487,20 @@ final class MainViewModel: ObservableObject {
 
     // ---------------- UI actions ----------------
 
+    private func replaceSource(_ text: String) {
+        sourceGeneration &+= 1
+        sourceText = text
+    }
+
+    func restoreClearedSource() {
+        guard sourceText.isEmpty, let clearedSource else { return }
+        replaceSource(clearedSource)
+        focusSource()
+    }
+
     func clearSource() {
-        sourceText = ""
+        if !sourceText.isEmpty { clearedSource = sourceText }
+        replaceSource("")
         focusSource()
     }
 
@@ -465,15 +529,20 @@ final class MainViewModel: ObservableObject {
     private func onInterfaceLanguageChanged() {
         refreshSettingsDisplay()
         statusText = status?() ?? ""
+        updateCharacterCount()
         objectWillChange.send()
     }
 
-    var characterCountText: String {
+    private(set) var characterCountText = ""
+
+    private func updateCharacterCount() {
         let length = sourceText.count
         if length == 0 {
-            return ""
+            characterCountText = ""
+            return
         }
-        return L("\(MainViewModel.group(length)) 字符", length == 1 ? "1 character" : "\(MainViewModel.group(length)) characters")
+        let count = MainViewModel.group(length)
+        characterCountText = L("\(count) 字符", length == 1 ? "1 character" : "\(count) characters")
     }
 
     static func group(_ number: Int) -> String {

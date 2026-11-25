@@ -9,20 +9,24 @@ struct MainView: View {
     var window: () -> NSWindow?
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            ZStack {
-                VStack(spacing: 0) {
-                    translatorCard.padding(EdgeInsets(top: 16, leading: 20, bottom: 6, trailing: 20))
-                    statusBar
+        GeometryReader { geometry in
+            let compact = geometry.size.width < 680
+            VStack(spacing: 0) {
+                if compact { compactHeader } else { header }
+                ZStack {
+                    VStack(spacing: 0) {
+                        translatorCard(compact: compact).padding(EdgeInsets(top: 16, leading: 20, bottom: 6, trailing: 20))
+                        statusBar(compact: compact)
+                    }
+                    if model.isHistoryOpen {
+                        HistoryDrawer(model: model, window: window, width: min(420, geometry.size.width - 40))
+                    }
                 }
-                if model.isHistoryOpen {
-                    HistoryDrawer(model: model, window: window)
-                }
+                .stateMotion(.reveal, value: model.isHistoryOpen)
             }
         }
         .background(Palette.window)
-        .frame(minWidth: 640, minHeight: 420)
+        .frame(minWidth: 390, minHeight: 420)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFile(providers) }
     }
 
@@ -38,6 +42,28 @@ struct MainView: View {
     }
 
     // ---------------- header ----------------
+
+    private var compactHeader: some View {
+        HStack(spacing: 4) {
+            TranslateFileHeaderButton { model.translateFile?(nil) }
+            Spacer(minLength: 0)
+            IconButton(symbol: "clock", help: L("翻译历史 (⌘Y)", "History (⌘Y)"), isOn: model.isHistoryOpen) { model.toggleHistory() }
+            Menu {
+                Button(L("术语表", "Glossary")) { model.openGlossary?() }
+                Button(L("实时转录", "Live transcription")) { model.openLive?() }
+                Button(model.topmost ? L("取消置顶", "Unpin window") : L("窗口置顶", "Keep on top")) { model.togglePin() }
+                Button(L("设置…", "Settings…")) { model.openSettings?() }
+                if let release = model.availableUpdate {
+                    Button(L("更新到 \(release.versionText)", "Update to \(release.versionText)")) { model.showUpdate?(release) }
+                }
+            } label: { Image(systemName: "ellipsis.circle") }
+            .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel(L("更多操作", "More actions"))
+        }
+        .padding(.leading, 78).padding(.trailing, 14)
+        .frame(height: 48)
+        .background(Palette.surface)
+    }
 
     private var header: some View {
         HStack(spacing: 0) {
@@ -82,13 +108,14 @@ struct MainView: View {
 
     // ---------------- translator card ----------------
 
-    private var translatorCard: some View {
-        VStack(spacing: 0) {
+    private func translatorCard(compact: Bool) -> some View {
+        let panes = compact ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+        return VStack(spacing: 0) {
             languageBar.frame(height: 52)
             Rectangle().fill(Palette.line).frame(height: 1)
-            HStack(spacing: 0) {
+            panes {
                 sourcePane
-                Rectangle().fill(Palette.line).frame(width: 1)
+                Rectangle().fill(Palette.line).frame(width: compact ? nil : 1, height: compact ? 1 : nil)
                 outputPane
             }
         }
@@ -126,8 +153,8 @@ struct MainView: View {
     private var sourcePane: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
-                PaneTextView(text: $model.sourceText, isEditable: true, focusRequest: model.focusRequest,
-                             onCommandReturn: { model.translate(force: true) }, onEscape: { escapePressed() },
+                PaneTextView(text: $model.sourceText, isEditable: true, sourceGeneration: model.sourceGeneration, focusRequest: model.focusRequest,
+                             onCommandReturn: { model.performTranslationAction() }, onEscape: { escapePressed() },
                              onFileDrop: { url in
                                  guard let translateFile = model.translateFile else { return false }
                                  translateFile(url)
@@ -152,7 +179,10 @@ struct MainView: View {
                 }
             }
             HStack {
-                Text(model.characterCountText).font(.system(size: 12)).foregroundColor(Palette.textTertiary)
+                if model.clearedSource != nil && model.sourceText.isEmpty {
+                    Button(L("撤销清空", "Undo clear")) { model.restoreClearedSource() }.buttonStyle(LinkButtonStyle())
+                }
+                Text(model.characterCountText).font(.system(size: 12).monospacedDigit()).foregroundColor(Palette.textTertiary)
                 Spacer()
             }
             .padding(.leading, 22).padding(.trailing, 10)
@@ -164,7 +194,7 @@ struct MainView: View {
     private var outputPane: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
-                PaneTextView(text: Binding(get: { model.outputText }, set: { _ in }), isEditable: false, onEscape: { escapePressed() })
+                PaneTextView(text: Binding(get: { model.outputText }, set: { _ in }), isEditable: false, outputGeneration: model.outputGeneration, onEscape: { escapePressed() })
                 if model.outputText.isEmpty && !model.isBusy {
                     Text(L("译文", "Translation")).font(.system(size: 18)).foregroundColor(Palette.textTertiary)
                         .padding(EdgeInsets(top: 14, leading: 22, bottom: 0, trailing: 20))
@@ -180,15 +210,21 @@ struct MainView: View {
             HStack {
                 Text(model.statusText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1).truncationMode(.tail)
                 Spacer()
-                IconButton(symbol: "arrow.clockwise", help: L("整体重新翻译 (⌘↩)", "Retranslate everything (⌘↩)")) { model.translate(force: true) }
-                IconButton(symbol: model.copied ? "checkmark" : "doc.on.doc", help: model.copied ? L("已复制", "Copied") : L("复制译文", "Copy translation")) {
-                    model.copyTranslation()
+                if !model.sourceText.isEmpty {
+                    IconButton(symbol: model.isBusy ? "stop.fill" : model.outputText.isEmpty ? "play.fill" : "arrow.clockwise",
+                               help: model.translationActionTitle + " (⌘↩)") { model.performTranslationAction() }
                 }
-                .padding(.leading, 2)
+                if !model.outputText.isEmpty {
+                    IconButton(symbol: model.copied ? "checkmark" : "doc.on.doc", help: model.copied ? L("已复制", "Copied") : L("复制译文", "Copy translation")) {
+                        model.copyTranslation()
+                    }
+                    .padding(.leading, 2)
+                }
             }
             .padding(.leading, 22).padding(.trailing, 10)
             .frame(height: 44)
         }
+        .stateMotion(.reveal, value: model.errorMessage != nil)
         .background(Palette.output)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -209,19 +245,23 @@ struct MainView: View {
         .padding(.bottom, 4)
     }
 
-    private var statusBar: some View {
+    private func statusBar(compact: Bool) -> some View {
         HStack {
-            HStack(spacing: 8) {
-                Circle().fill(model.engineOk ? Palette.success : Palette.warning).frame(width: 7, height: 7)
-                Text(model.engineText).font(.system(size: 12)).foregroundColor(Palette.textSecondary)
+            Button { model.openSettings?() } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(model.engineOk ? Palette.success : Palette.warning).frame(width: 7, height: 7)
+                    Text(model.engineText).font(.system(size: 12)).foregroundColor(Palette.textSecondary)
+                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .onTapGesture { model.openSettings?() }
+            .buttonStyle(.plain)
             .help(L("更改翻译服务", "Change translation service"))
             Spacer()
-            Text(model.shortcutHint).font(.system(size: 12))
-                .foregroundColor(model.shortcutHintIsError ? Palette.error : Palette.textTertiary)
-                .lineLimit(1)
+            if !compact || model.shortcutHintIsError {
+                Text(model.shortcutHint).font(.system(size: 12))
+                    .foregroundColor(model.shortcutHintIsError ? Palette.error : Palette.textTertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 26)
         .padding(.bottom, 8)
@@ -238,23 +278,28 @@ struct MainView: View {
 }
 
 struct LoadingBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var offset: CGFloat = -140
 
     var body: some View {
-        GeometryReader { geometry in
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Palette.accentText)
-                .frame(width: 140, height: 2)
-                .offset(x: offset)
-                .onAppear {
-                    offset = -140
-                    withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
-                        offset = max(geometry.size.width, 200)
+        if reduceMotion {
+            Rectangle().fill(Palette.accentText).frame(height: 2)
+        } else {
+            GeometryReader { geometry in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Palette.accentText)
+                    .frame(width: 140, height: 2)
+                    .offset(x: offset)
+                    .onAppear {
+                        offset = -140
+                        withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                            offset = max(geometry.size.width, 200)
+                        }
                     }
-                }
+            }
+            .frame(height: 2)
+            .clipped()
         }
-        .frame(height: 2)
-        .clipped()
     }
 }
 
@@ -263,6 +308,8 @@ struct LoadingBar: View {
 struct HistoryDrawer: View {
     @ObservedObject var model: MainViewModel
     var window: () -> NSWindow?
+
+    var width: CGFloat
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -282,8 +329,10 @@ struct HistoryDrawer: View {
                     IconButton(symbol: "xmark", help: L("关闭 (Esc)", "Close (Esc)"), size: 28, fontSize: 12) { model.isHistoryOpen = false }
                 }
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 6, trailing: 10))
-                SearchField(text: $model.historySearch, placeholder: L("搜索原文或译文", "Search source or translation"))
+                if !model.history.entries.isEmpty {
+                    SearchField(text: $model.historySearch, placeholder: L("搜索原文或译文", "Search source or translation"))
                     .padding(.horizontal, 18).padding(.bottom, 10)
+                }
                 let entries = model.filteredHistory
                 if entries.isEmpty {
                     Spacer()
@@ -300,7 +349,7 @@ struct HistoryDrawer: View {
                     }
                 }
             }
-            .frame(width: 420)
+            .frame(width: width)
             .frame(maxHeight: .infinity)
             .background(Palette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -340,6 +389,7 @@ struct HistoryRow: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 1) }
         .contentShape(Rectangle())
         .onTapGesture { onRestore() }
+        .stateMotion(.feedback, value: hovering)
         .onHover { hovering = $0 }
     }
 }

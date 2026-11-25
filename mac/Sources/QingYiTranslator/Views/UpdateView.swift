@@ -157,6 +157,8 @@ struct UpdateView: View {
             }
             .padding(.top, 14)
         }
+        .stateMotion(.reveal, value: model.busy)
+        .stateMotion(.reveal, value: model.error != nil)
         .padding(20)
         .background(Palette.surface)
         .frame(minWidth: 440, minHeight: 320)

@@ -667,7 +667,7 @@ public partial class LiveWindow : Window
         BannerLinkButton.Visibility = link is null ? Visibility.Collapsed : Visibility.Visible;
         DownloadOptions.Visibility = Visibility.Collapsed;
         BannerProgress.Visibility = Visibility.Collapsed;
-        Banner.Visibility = Visibility.Visible;
+        Motion.Show(Banner, true);
     }
 
     // Keeps the banner's buttons but shows what went wrong.

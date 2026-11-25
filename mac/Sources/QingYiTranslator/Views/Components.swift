@@ -2,6 +2,29 @@ import AppKit
 import QingYiCore
 import SwiftUI
 
+enum MotionSpeed {
+    case feedback, reveal
+    var animation: Animation {
+        .easeOut(duration: self == .feedback ? 0.10 : 0.18)
+    }
+}
+
+private struct StateMotion<Value: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    let speed: MotionSpeed
+    let value: Value
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : speed.animation, value: value)
+    }
+}
+
+extension View {
+    func stateMotion<Value: Equatable>(_ speed: MotionSpeed, value: Value) -> some View {
+        modifier(StateMotion(speed: speed, value: value))
+    }
+}
+
 // MARK: - Buttons
 
 /// A square icon button that highlights on hover, like the Windows IconButton style.
@@ -23,11 +46,24 @@ struct IconButton: View {
                 .frame(width: size, height: size)
                 .background(RoundedRectangle(cornerRadius: 8).fill(isOn ? Palette.accentSoft : hovering ? Palette.hover : Color.clear))
                 .contentShape(Rectangle())
+                .stateMotion(.feedback, value: hovering)
+                .stateMotion(.feedback, value: isOn)
+                .id(symbol)
+                .transition(.opacity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconPressStyle())
+        .stateMotion(.feedback, value: symbol)
         .onHover { hovering = $0 }
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+private struct IconPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.65 : 1)
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -42,6 +78,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 7).fill(danger ? Palette.danger : configuration.isPressed ? Palette.accentPressed : Palette.accent))
             .opacity(configuration.isPressed ? 0.9 : 1)
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -56,6 +93,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .frame(height: compact ? 28 : 32)
             .background(RoundedRectangle(cornerRadius: 7).fill(configuration.isPressed ? Palette.pressed : Palette.surface))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.inputLine, lineWidth: 1))
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -65,6 +103,7 @@ struct LinkButtonStyle: ButtonStyle {
             .font(.system(size: 13))
             .foregroundColor(Palette.accentText)
             .opacity(configuration.isPressed ? 0.7 : 1)
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -77,6 +116,7 @@ struct ChipButtonStyle: ButtonStyle {
             .frame(height: 24)
             .background(RoundedRectangle(cornerRadius: 12).fill(configuration.isPressed ? Palette.pressed : Palette.surface))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.inputLine, lineWidth: 1))
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -89,6 +129,7 @@ struct PillButtonStyle: ButtonStyle {
             .frame(height: 26)
             .background(Capsule().fill(Palette.accentSoft))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .stateMotion(.feedback, value: configuration.isPressed)
     }
 }
 
@@ -176,6 +217,8 @@ struct ToggleRow: View {
 struct PaneTextView: NSViewRepresentable {
     @Binding var text: String
     var isEditable: Bool
+    var sourceGeneration = 0
+    var outputGeneration: Int? = nil
     var fontSize: CGFloat = Fonts.pane
     var insets = NSSize(width: 20, height: 14)
     var focusRequest = 0
@@ -240,28 +283,35 @@ struct PaneTextView: NSViewRepresentable {
         // The native editor can be ahead of its binding while an input method is
         // composing or before textDidChange is delivered. Translation/status
         // redraws must not restore the same old model value over that newer input.
-        let modelTextChanged = coordinator.lastModelText != text
-        coordinator.lastModelText = text
-        let current = textView.string
-        if current != text && (!isEditable || modelTextChanged) {
-            coordinator.isUpdating = true
-            if !isEditable, text.hasPrefix(current), let storage = textView.textStorage {
-                // Streaming: append only the new piece, keeping the scroll position stable.
-                let delta = String(text.dropFirst(current.count))
-                storage.append(NSAttributedString(string: delta, attributes: textView.typingAttributes))
-                textView.scrollToEndOfDocument(nil)
+        if let outputGeneration, !isEditable, let storage = textView.textStorage {
+            let byteCount = text.utf8.count
+            if coordinator.outputGeneration == outputGeneration {
+                if coordinator.outputBytes < byteCount {
+                    let viewport = scrollView.contentView.documentVisibleRect
+                    let followsTail = viewport.maxY >= textView.bounds.maxY - 4 && textView.selectedRange().length == 0
+                    // Slice by bytes so a combining mark or emoji continuation can arrive in the next chunk.
+                    let delta = String(decoding: text.utf8.dropFirst(coordinator.outputBytes), as: UTF8.self)
+                    storage.append(NSAttributedString(string: delta, attributes: textView.typingAttributes))
+                    if followsTail { textView.scrollToEndOfDocument(nil) }
+                }
             } else {
+                textView.string = text
+                textView.scroll(.zero)
+            }
+            coordinator.outputGeneration = outputGeneration
+            coordinator.outputBytes = byteCount
+        } else if coordinator.sourceGeneration != sourceGeneration || coordinator.lastModelText != text {
+            coordinator.sourceGeneration = sourceGeneration
+            coordinator.lastModelText = text
+            if textView.string != text {
+                coordinator.isUpdating = true
                 let selection = textView.selectedRange()
                 textView.string = text
                 textView.typingAttributes = [.font: NSFont.systemFont(ofSize: fontSize), .foregroundColor: Palette.textPrimaryNS]
-                if isEditable {
-                    let location = min(selection.location, (text as NSString).length)
-                    textView.setSelectedRange(NSRange(location: location, length: 0))
-                } else {
-                    textView.scroll(.zero)
-                }
+                let location = min(selection.location, (text as NSString).length)
+                textView.setSelectedRange(NSRange(location: location, length: 0))
+                coordinator.isUpdating = false
             }
-            coordinator.isUpdating = false
         }
 
         if coordinator.lastFocusRequest != focusRequest {
@@ -280,13 +330,17 @@ struct PaneTextView: NSViewRepresentable {
         weak var textView: NSTextView?
         var isUpdating = false
         var lastFocusRequest = 0
+        var sourceGeneration = 0
         var lastModelText: String?
+        var outputGeneration: Int?
+        var outputBytes = 0
 
         init(parent: PaneTextView) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             let value = textView.string
+            lastModelText = value
             if parent.text != value {
                 parent.text = value
             }
@@ -369,10 +423,13 @@ enum Dialogs {
         alert.messageText = heading
         alert.informativeText = message
         alert.alertStyle = danger ? .warning : .informational
-        let primary = alert.addButton(withTitle: confirmText)
         if danger {
-            primary.hasDestructiveAction = true
+            alert.addButton(withTitle: L("取消", "Cancel"))
+            let destructive = alert.addButton(withTitle: confirmText)
+            destructive.hasDestructiveAction = true
+            return alert.runModal() == .alertSecondButtonReturn
         }
+        alert.addButton(withTitle: confirmText)
         alert.addButton(withTitle: L("取消", "Cancel"))
         return alert.runModal() == .alertFirstButtonReturn
     }

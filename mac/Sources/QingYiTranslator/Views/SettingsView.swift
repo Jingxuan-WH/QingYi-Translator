@@ -334,7 +334,7 @@ struct SettingsView: View {
                     appearance
                     service
                     shortcuts
-                    permissions
+                    if model.doubleCopyEnabled || model.hotkeyEnabled { permissions }
                     LiveSettingsSection(draft: model.live)
                     preferences
                     general
@@ -460,17 +460,21 @@ struct SettingsView: View {
             SectionTitle(text: L("快捷键", "Shortcuts"))
             Card {
                 ToggleRow(title: L("按两次 ⌘C 翻译选中的文字", "Press ⌘C twice to translate the selection"), isOn: $model.doubleCopyEnabled)
-                HintText(text: L("与 DeepL 相同：选中文字后按住 ⌘，快速按两下 C。", "Like DeepL: select text, hold ⌘ and quickly press C twice."))
-                ToggleRow(title: L("使用快捷键翻译选中的文字", "Use a hotkey to translate the selection"), isOn: $model.hotkeyEnabled).padding(.top, 4)
-                HStack(spacing: 12) {
-                    Text(L("快捷键", "Hotkey")).font(.system(size: 13))
-                    HotkeyRecorder(text: model.hotkeyText, onFocusChange: model.hotkeyFocusChanged, onModifiers: model.hotkeyModifiersChanged,
-                                   onGesture: model.hotkeyRecorded, onClear: model.hotkeyCleared)
-                        .frame(width: 200, height: 30)
-                    Spacer()
+                if model.doubleCopyEnabled {
+                    HintText(text: L("选中文字后，按住 ⌘ 并连按两次 C。", "Select text, hold ⌘ and press C twice."))
                 }
-                .padding(.top, 10)
-                HintText(text: model.hotkeyStatus, color: model.hotkeyStatusIsError ? Palette.error : Palette.textTertiary)
+                ToggleRow(title: L("使用快捷键翻译选中的文字", "Use a hotkey to translate the selection"), isOn: $model.hotkeyEnabled).padding(.top, 4)
+                if model.hotkeyEnabled {
+                    HStack(spacing: 12) {
+                        Text(L("快捷键", "Hotkey")).font(.system(size: 13))
+                        HotkeyRecorder(text: model.hotkeyText, onFocusChange: model.hotkeyFocusChanged, onModifiers: model.hotkeyModifiersChanged,
+                                       onGesture: model.hotkeyRecorded, onClear: model.hotkeyCleared)
+                            .frame(width: 200, height: 30)
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+                    HintText(text: model.hotkeyStatus, color: model.hotkeyStatusIsError ? Palette.error : Palette.textTertiary)
+                }
             }
         }
     }

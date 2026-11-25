@@ -16,7 +16,6 @@
         <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
         <Setter Property="FontSize" Value="15"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -48,7 +47,6 @@
         <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
         <Setter Property="FontSize" Value="15"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
@@ -80,7 +78,6 @@
         <Setter Property="Padding" Value="18,7"/>
         <Setter Property="MinWidth" Value="84"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -132,7 +129,6 @@
         <Setter Property="Padding" Value="18,7"/>
         <Setter Property="MinWidth" Value="84"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -160,7 +156,6 @@
         <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -184,7 +179,6 @@
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="10,3"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -212,7 +206,6 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Padding" Value="11,4"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -237,7 +230,6 @@
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Padding" Value="12,7"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
@@ -294,7 +286,7 @@
                            Margin="8,1,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
             </Grid>
             <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                   PopupAnimation="Fade" VerticalOffset="2" HorizontalOffset="-8"
+                   PopupAnimation="{DynamicResource {x:Static SystemParameters.ComboBoxPopupAnimationKey}}" VerticalOffset="2" HorizontalOffset="-8"
                    IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                 <Grid Margin="8,2,8,14" MinWidth="{Binding ActualWidth, ElementName=Root}">
                     <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="10">
@@ -329,7 +321,6 @@
         <Setter Property="Padding" Value="12,0,10,0"/>
         <Setter Property="Height" Value="36"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}"/>
         <Setter Property="Template" Value="{StaticResource FlatComboBoxTemplate}"/>
     </Style>
@@ -426,7 +417,6 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBrush}"/>
         <Setter Property="SelectionOpacity" Value="0.3"/>
         <Setter Property="CaretBrush" Value="{DynamicResource AccentTextBrush}"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="ContextMenu" Value="{StaticResource TextBoxMenu}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -451,7 +441,6 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBrush}"/>
         <Setter Property="SelectionOpacity" Value="0.35"/>
         <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="ContextMenu" Value="{StaticResource TextBoxMenu}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -488,7 +477,6 @@
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBrush}"/>
         <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="ContextMenu" Value="{StaticResource TextBoxMenu}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -516,7 +504,6 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
