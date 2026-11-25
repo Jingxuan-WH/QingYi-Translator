@@ -375,7 +375,7 @@ struct SettingsView: View {
             .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
         }
         .background(Palette.window)
-        .frame(minWidth: 480, minHeight: 420)
+        .frame(minWidth: 390, minHeight: 420)
     }
 
     private var appearance: some View {
@@ -390,7 +390,7 @@ struct SettingsView: View {
                         Text("简体中文").tag(Loc.chineseCode)
                         Text("English").tag(Loc.englishCode)
                     }
-                    .labelsHidden().frame(width: 200)
+                    .labelsHidden().frame(minWidth: 110, idealWidth: 200, maxWidth: 200)
                 }
                 HStack {
                     Text(L("主题", "Theme")).font(.system(size: 13))
@@ -400,7 +400,7 @@ struct SettingsView: View {
                         Text(L("浅色", "Light")).tag(AppSettings.themeLight)
                         Text(L("深色", "Dark")).tag(AppSettings.themeDark)
                     }
-                    .labelsHidden().frame(width: 200)
+                    .labelsHidden().frame(minWidth: 110, idealWidth: 200, maxWidth: 200)
                 }
                 .padding(.top, 10)
             }
@@ -455,7 +455,7 @@ struct SettingsView: View {
                 FieldLabel(text: L("模型", "Model"))
                 TextField("", text: $model.model).formField()
                 if !model.preset.suggestedModels.isEmpty {
-                    HStack(spacing: 8) {
+                    WrappingRow {
                         ForEach(model.preset.suggestedModels, id: \.self) { name in
                             Button(name) { model.model = name }.buttonStyle(ChipButtonStyle())
                         }

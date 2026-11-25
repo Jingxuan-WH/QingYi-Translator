@@ -442,3 +442,58 @@ enum Dialogs {
         alert.runModal()
     }
 }
+
+// Keep each action at its readable size, moving it to the next line when needed.
+// Using a Layout preserves control identity and keyboard focus during window resizing.
+struct WrappingRow: Layout {
+    var spacing: CGFloat = 8
+    var alignment: HorizontalAlignment = .leading
+
+    private struct Row {
+        var children: [(LayoutSubview, CGSize)] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func rows(in width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for child in subviews {
+            var size = child.sizeThatFits(.unspecified)
+            if size.width > width {
+                size = child.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            }
+            if !row.children.isEmpty && row.width + spacing + size.width > width {
+                rows.append(row)
+                row = Row()
+            }
+            if !row.children.isEmpty { row.width += spacing }
+            row.children.append((child, size))
+            row.width += size.width
+            row.height = max(row.height, size.height)
+        }
+        if !row.children.isEmpty { rows.append(row) }
+        return rows
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = rows(in: proposal.width ?? .infinity, subviews: subviews)
+        let neededWidth = lines.map(\.width).max() ?? 0
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? neededWidth
+        return CGSize(width: width, height: lines.reduce(0) { $0 + $1.height } + CGFloat(max(0, lines.count - 1)) * spacing)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(in: bounds.width, subviews: subviews) {
+            let extraWidth = max(0, bounds.width - row.width)
+            var x = bounds.minX + (alignment == .trailing ? extraWidth : alignment == .center ? extraWidth / 2 : 0)
+            for (child, size) in row.children {
+                child.place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                            anchor: .topLeading, proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+}

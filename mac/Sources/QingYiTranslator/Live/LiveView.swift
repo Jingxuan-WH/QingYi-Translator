@@ -22,7 +22,7 @@ struct LiveView: View {
         }
         .stateMotion(.reveal, value: model.banner != nil)
         .background(Palette.window)
-        .frame(minWidth: 600, minHeight: 420)
+        .frame(minWidth: 390, minHeight: 420)
         .onAppear { model.refreshMicrophones() }
     }
 
@@ -34,7 +34,7 @@ struct LiveView: View {
                 HStack(spacing: 10) { audioControls; Spacer(minLength: 12); languageControls }
                 VStack(alignment: .leading, spacing: 8) { audioControls; languageControls }
             }
-            HStack(spacing: 8) {
+            WrappingRow {
                 if model.state == .idle || model.state == .paused {
                     Button(model.state == .paused ? L("继续", "Resume") : L("开始", "Start")) { model.startOrResume() }
                         .buttonStyle(PrimaryButtonStyle())
@@ -50,7 +50,6 @@ struct LiveView: View {
                 }
                 Text(model.statusText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).lineLimit(1).truncationMode(.tail)
                     .padding(.leading, model.state == .preparing || model.state == .downloading ? 0 : 8)
-                Spacer(minLength: 8)
                 if model.usesMicrophone {
                     LevelMeter(symbol: "mic", level: model.micLevel).help(L("麦克风音量", "Microphone level"))
                 }
@@ -65,7 +64,7 @@ struct LiveView: View {
     }
 
     private var audioControls: some View {
-        HStack(spacing: 10) {
+        WrappingRow(spacing: 10) {
             Picker("", selection: $model.audioSource) {
                 Text(L("麦克风", "Microphone")).tag(LiveSettings.sourceMicrophone)
                 Text(L("电脑播放的声音", "Mac sound")).tag(LiveSettings.sourceSystem)
@@ -110,7 +109,7 @@ struct LiveView: View {
         case .info, .modelDownload: isError = false
         default: isError = true
         }
-        return HStack(alignment: .center, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(banner.text()).font(.system(size: 13)).foregroundColor(isError ? Palette.errorText : Palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -118,19 +117,20 @@ struct LiveView: View {
                     ProgressView(value: progress).progressViewStyle(.linear)
                 }
             }
-            Spacer(minLength: 0)
-            if case .permission(let kind) = banner.kind {
-                Button(L("重置权限", "Reset permission")) { model.resetPermission(kind) }
-                    .buttonStyle(LinkButtonStyle())
-                    .help(L("清除 macOS 记住的授权，下次开始时会重新询问（更新轻译后授权失效时有用）",
-                            "Clears what macOS remembers, so it asks again next time (useful when an update invalidated the permission)"))
-            }
-            if banner.progress == nil {
-                Button(bannerButtonTitle(banner.kind)) { model.bannerPrimaryAction() }
-                    .buttonStyle(SecondaryButtonStyle(compact: true))
-            }
-            if banner.kind != .info && banner.progress == nil {
-                IconButton(symbol: "xmark", help: L("关闭", "Dismiss"), size: 24, fontSize: 11) { model.dismissBanner() }
+            WrappingRow {
+                if case .permission(let kind) = banner.kind {
+                    Button(L("重置权限", "Reset permission")) { model.resetPermission(kind) }
+                        .buttonStyle(LinkButtonStyle())
+                        .help(L("清除 macOS 记住的授权，下次开始时会重新询问（更新轻译后授权失效时有用）",
+                                "Clears what macOS remembers, so it asks again next time (useful when an update invalidated the permission)"))
+                }
+                if banner.progress == nil {
+                    Button(bannerButtonTitle(banner.kind)) { model.bannerPrimaryAction() }
+                        .buttonStyle(SecondaryButtonStyle(compact: true))
+                }
+                if banner.kind != .info && banner.progress == nil {
+                    IconButton(symbol: "xmark", help: L("关闭", "Dismiss"), size: 24, fontSize: 11) { model.dismissBanner() }
+                }
             }
         }
         .padding(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 10))
@@ -151,7 +151,7 @@ struct LiveView: View {
     // ---------------- options and export ----------------
 
     private var footer: some View {
-        HStack(spacing: 20) {
+        WrappingRow(spacing: 12) {
             Toggle(isOn: $model.translatePartials) {
                 Text(L("临时结果也预翻译", "Translate partial results too")).font(.system(size: 13))
             }
@@ -161,7 +161,6 @@ struct LiveView: View {
                 Text(L("悬浮字幕", "Floating captions")).font(.system(size: 13))
             }
             .toggleStyle(.switch).controlSize(.small)
-            Spacer()
             if !model.transcript.lines.isEmpty {
                 Menu {
                     Section(L("文本", "Text")) {

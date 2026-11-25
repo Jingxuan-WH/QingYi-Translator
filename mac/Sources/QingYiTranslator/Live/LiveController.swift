@@ -85,7 +85,7 @@ final class LiveController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 640), styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = L("实时转录", "Live transcription")
-        window.minSize = NSSize(width: 600, height: 420)
+        window.minSize = NSSize(width: 390, height: 420)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = NSHostingView(rootView: LiveView(model: model, window: { [weak window] in window }).environmentObject(Loc.shared))

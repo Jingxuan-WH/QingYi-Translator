@@ -450,7 +450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             showMainWindow()
         }
         let vm = SettingsViewModel(settings: settings, app: self)
-        let window = makeWindow(title: L("设置", "Settings"), size: NSSize(width: 560, height: 680), minSize: NSSize(width: 480, height: 420), over: mainWindow)
+        let window = makeWindow(title: L("设置", "Settings"), size: NSSize(width: 560, height: 680), minSize: NSSize(width: 390, height: 420), over: mainWindow)
         window.contentView = NSHostingView(rootView: SettingsView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
             .environmentObject(Loc.shared))
         settingsWindow = window
@@ -472,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             owner = mainWindow
         }
         let vm = GlossaryViewModel(glossary: glossary, enabled: settings.glossaryEnabled)
-        let window = makeWindow(title: L("术语表", "Glossary"), size: NSSize(width: 560, height: 520), minSize: NSSize(width: 480, height: 360), over: owner)
+        let window = makeWindow(title: L("术语表", "Glossary"), size: NSSize(width: 560, height: 520), minSize: NSSize(width: 390, height: 360), over: owner)
         window.contentView = NSHostingView(rootView: GlossaryView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
             .environmentObject(Loc.shared))
         glossaryWindow = window
@@ -499,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             owner = mainWindow
         }
         let vm = UpdateViewModel(release: release, app: self)
-        let window = makeWindow(title: L("轻译更新", "QingYi Translator Update"), size: NSSize(width: 480, height: 400), minSize: NSSize(width: 440, height: 320), over: owner)
+        let window = makeWindow(title: L("轻译更新", "QingYi Translator Update"), size: NSSize(width: 480, height: 400), minSize: NSSize(width: 390, height: 320), over: owner)
         window.contentView = NSHostingView(rootView: UpdateView(model: vm, close: { [weak window] in window?.close() }).environmentObject(Loc.shared))
         updateWindow = window
         updateModel = vm
@@ -518,7 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             vm = FileTranslationViewModel(settings: settings, glossary: glossary)
             vm.openSettings = { [weak self] in self?.openSettings() }
             NSApp.setActivationPolicy(.regular)
-            let window = makeWindow(title: L("翻译文件", "Translate a File"), size: NSSize(width: 720, height: 620), minSize: NSSize(width: 560, height: 460),
+            let window = makeWindow(title: L("翻译文件", "Translate a File"), size: NSSize(width: 720, height: 620), minSize: NSSize(width: 390, height: 460),
                                     over: mainWindow.isVisible ? mainWindow : nil)
             window.contentView = NSHostingView(rootView: FileTranslationView(model: vm, window: { [weak window] in window }, close: { [weak window] in window?.close() })
                 .environmentObject(Loc.shared))

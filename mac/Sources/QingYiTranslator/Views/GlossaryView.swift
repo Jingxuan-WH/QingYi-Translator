@@ -266,7 +266,15 @@ struct GlossaryView: View {
     @FocusState private var focus: GlossaryFocus?
 
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+            content(compact: geometry.size.width < 480)
+        }
+        .frame(minWidth: 390, minHeight: 360)
+    }
+
+    private func content(compact: Bool) -> some View {
+        let toolbarLayout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+        return VStack(spacing: 0) {
             HStack {
                 Text(L("术语表", "Glossary")).font(.system(size: 16, weight: .semibold)).foregroundColor(Palette.textPrimary)
                 Text(model.countText).font(.system(size: 12)).foregroundColor(Palette.textTertiary).padding(.leading, 10)
@@ -275,12 +283,14 @@ struct GlossaryView: View {
                     .toggleStyle(.switch).controlSize(.small)
             }
             .padding(EdgeInsets(top: 14, leading: 20, bottom: 8, trailing: 20))
-            HStack(spacing: 8) {
+            toolbarLayout {
                 SearchField(text: $model.search, placeholder: L("搜索术语", "Search terms"))
-                Button(L("粘贴", "Paste")) { _ = model.pasteFromClipboard(force: true) }.buttonStyle(SecondaryButtonStyle(compact: true))
+                HStack(spacing: 8) {
+                    Button(L("粘贴", "Paste")) { _ = model.pasteFromClipboard(force: true) }.buttonStyle(SecondaryButtonStyle(compact: true))
                     .help(L("从剪贴板粘贴多条术语（每行一条，或 Excel 里复制的两列）", "Paste several terms from the clipboard (one per line, or two columns copied from Excel)"))
-                Button(L("导入…", "Import…")) { model.importFile(from: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
-                Button(L("导出…", "Export…")) { model.exportFile(from: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
+                    Button(L("导入…", "Import…")) { model.importFile(from: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
+                    Button(L("导出…", "Export…")) { model.exportFile(from: window()) }.buttonStyle(SecondaryButtonStyle(compact: true))
+                }
             }
             .padding(.horizontal, 20).padding(.bottom, 10)
             HStack(spacing: 8) {
@@ -312,7 +322,6 @@ struct GlossaryView: View {
             .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
         }
         .background(Palette.window)
-        .frame(minWidth: 480, minHeight: 360)
         .onAppear { model.focusLastRow() }
         .onChange(of: model.focusRequest) { request in
             if let request {
